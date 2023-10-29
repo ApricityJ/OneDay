@@ -7,8 +7,8 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 
 from model.lightGBM import LightGBM
-from utils.util import of_json, to_json
-from preprocessing.feature_select import select_feature_and_prepare_data
+from util.util import of_json, to_json
+from preprocess.feature_select import select_feature_and_prepare_data, create_data_bunch_from_csv
 from constant import *
 
 warnings.filterwarnings("ignore")
@@ -18,7 +18,7 @@ if __name__ == '__main__':
 
     args = {
         'dataset': 'anti_fraud',
-        'version': '1',
+        'version': '3',
         'objective': 'binary',  # binary, multiclass...
         'metric': None,  # None需在模型中指定
         'num_class': 2,
@@ -40,7 +40,8 @@ if __name__ == '__main__':
     print("-----------------------------")
 
 
-    select_feature_and_prepare_data('flatmap')
+    # select_feature_and_prepare_data('flatmap')
+    create_data_bunch_from_csv()
 
     if args['objective'] == 'multiclass':
         assert args['num_class'] > 2, 'multiclass objective should have class num > 2.'

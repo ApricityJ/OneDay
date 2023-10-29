@@ -6,7 +6,7 @@ import pandas as pd
 import numpy as np
 import xgboost as xgb
 
-from utils.util import of_json, to_json
+from util.util import of_json, to_json
 from model.XGBoost import XGBoost
 
 warnings.filterwarnings("ignore")

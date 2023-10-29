@@ -1,8 +1,9 @@
 import pandas as pd
 from category_encoders import OneHotEncoder
 
-from utils.loader import *
-from utils.exporter import *
+from util.loader import *
+from util.exporter import *
+from preprocess import feature_select
 from constant import *
 
 
@@ -48,7 +49,7 @@ def preprocess_flatmap(key='flatmap'):
 
     df_all['NTRL_CUST_AGE'] = df_all['NTRL_CUST_AGE'].apply(calculate_age)
     df_all['NTRL_CUST_SEX_CD'] = df_all['NTRL_CUST_SEX_CD'].apply(lambda x: 0 if x == 'A' else 1)
-    result_rank_cd = category_encoding_by_onehot(df_all, 'NTRL_RANK_CD', is_train_name = 'SRC')
+    result_rank_cd = category_encoding_by_onehot(df_all, 'NTRL_RANK_CD', is_train_name='SRC')
     df_all = pd.concat([df_all, result_rank_cd], axis=1)
     df_all.drop(['NTRL_RANK_CD'], axis=1, inplace=True)
     df_all.drop(['DATA_DAT'], axis=1, inplace=True)
@@ -72,7 +73,9 @@ def preprocess_flatmap(key='flatmap'):
 
 
 def preprocess_all():
-    preprocess_flatmap('flatmap')
+    # preprocess_flatmap('flatmap') # 只要生成一次即可
+    feature_select.select_by_boruta_result('flatmap')
 
-preprocess_all()
-print("--------- done preprocess data ---------")
+
+# preprocess_all()
+# print("--------- done preprocess data ---------")

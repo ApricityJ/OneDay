@@ -16,7 +16,7 @@ file_name_train = 'train.p'
 file_name_test = 'test.p'
 
 random_states = [0, 1, 42, 2023, 29]
-active_random_state = 29
+active_random_state = 42
 
 LABEL = 'FLAG'
 ID = 'CUST_NO'
