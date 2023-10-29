@@ -45,30 +45,30 @@ def best_threshold(y_true, pred_proba, proba_range, verbose=False):
     return (optimal_threshold, best_score)
 
 
-# def focal_loss_lgb(y_pred, dtrain, alpha, gamma):
-#     """
-#     Focal Loss for lightgbm
-#
-#     Parameters:
-#     -----------
-#     y_pred: numpy.ndarray
-#         array with the predictions
-#     dtrain: lightgbm.Dataset
-#     alpha, gamma: float
-#         See original paper https://arxiv.org/pdf/1708.02002.pdf
-#     """
-#     a, g = alpha, gamma
-#     y_true = dtrain.label
-#
-#     def fl(x, t):
-#         p = 1 / (1 + np.exp(-x))
-#         return -(a * t + (1 - a) * (1 - t)) * ((1 - (t * p + (1 - t) * (1 - p))) ** g) * (
-#                     t * np.log(p) + (1 - t) * np.log(1 - p))
-#
-#     partial_fl = lambda x: fl(x, y_true)
-#     grad = derivative(partial_fl, y_pred, n=1, dx=1e-6)
-#     hess = derivative(partial_fl, y_pred, n=2, dx=1e-6)
-#     return grad, hess
+def focal_loss_lgb_1(y_pred, dtrain, alpha=0.25, gamma=2):
+    """
+    Focal Loss for lightgbm
+
+    Parameters:
+    -----------
+    y_pred: numpy.ndarray
+        array with the predictions
+    dtrain: lightgbm.Dataset
+    alpha, gamma: float
+        See original paper https://arxiv.org/pdf/1708.02002.pdf
+    """
+    a, g = alpha, gamma
+    y_true = dtrain.label
+
+    def fl(x, t):
+        p = 1 / (1 + np.exp(-x))
+        return -(a * t + (1 - a) * (1 - t)) * ((1 - (t * p + (1 - t) * (1 - p))) ** g) * (
+                    t * np.log(p) + (1 - t) * np.log(1 - p))
+
+    partial_fl = lambda x: fl(x, y_true)
+    grad = derivative(partial_fl, y_pred, n=1, dx=1e-6)
+    hess = derivative(partial_fl, y_pred, n=2, dx=1e-6)
+    return grad, hess
 
 
 # def f1_loss(y_pred, dtrain):
@@ -226,3 +226,51 @@ def xgb_f1_score_multi_weighted_eval(y_pred, data, num_class):
     predictions = np.argmax(y_pred, axis=1)
     y_true = data.get_label()
     return 'f1-weighted', f1_score(y_true, predictions, average='weighted')
+
+def focal_loss_lgb_2(y_pred, dtrain, alpha=0.25, gamma=2.0):
+    """ Focal loss for lightgbm.
+
+    Parameters:
+    -----------
+    y_true: true labels
+    y_pred: predicted values
+    alpha: alpha coefficient for class weighting
+    gamma: gamma coefficient for focusing on hard examples
+
+    Returns:
+    --------
+    gradient, hessian: gradient and hessian for lightgbm
+    """
+    y_true = dtrain.label
+    prob = 1. / (1. + np.exp(-y_pred))
+
+    # Calculate pt
+    pt = np.where(y_true == 1, prob, 1 - prob)
+
+    # Calculate Focal Loss gradient & hessian
+    grad = -alpha * (1 - pt) ** gamma * (y_true - prob)
+    hess = alpha * (1 - pt) ** gamma * (gamma * pt * (1 - pt) + pt * (1 - pt) * (y_true - prob))
+
+    return grad, hess
+
+
+def focal_loss_lgb_eval_error(y_true, y_pred, alpha=0.25, gamma=2.0):
+    """ Focal loss error function for lightgbm.
+
+    Parameters:
+    -----------
+    y_true: true labels
+    y_pred: predicted values
+    alpha: alpha coefficient for class weighting
+    gamma: gamma coefficient for focusing on hard examples
+
+    Returns:
+    --------
+    string, float: error name and error value
+    """
+    a_t = y_true * alpha + (1 - y_true) * (1 - alpha)
+    p_t = y_true * y_pred + (1 - y_true) * (1 - y_pred)
+
+    loss = -a_t * (1 - p_t) ** gamma * np.log(p_t)
+
+    return 'focal_loss', np.mean(loss), False

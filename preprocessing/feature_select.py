@@ -6,8 +6,10 @@ from lightgbm import LGBMClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.utils import Bunch
 import pickle
+import json
+import ast
 
-from preprocessing.process_before_select import preprocess_all
+# from preprocessing.process_before_select import preprocess_all
 from utils import loader
 from constant import *
 
@@ -30,7 +32,26 @@ def select_by_boruta(key: str):
     selected = train.columns[boruta.support_]
     print(f'select columns : {selected}')
 
-    return  train[selected], label_col, test[selected], test_id_col
+    return train[selected], label_col, test[selected], test_id_col
+
+
+def flatmap_select(key='flatmap'):
+    with open('/Users/sophie/workspace/sophie/python/OneDay/data/flatmap_selected_cols.txt', 'r') as f:
+        selected = f.readline()
+    # print(type(selected))
+    selected = ast.literal_eval(selected)
+    # print(type(selected))
+    # print(selected)
+    print(f'select columns : {selected}')
+    train = loader.to_df(Path(dir_train).joinpath(f'train_{key}.csv'))
+    test = loader.to_df(Path(dir_test).joinpath(f'test_{key}.csv'))
+
+    label_col = train[LABEL]
+    train.drop(LABEL, axis=1, inplace=True)
+    test_id_col = test[ID]
+
+    return train[selected], label_col, test[selected], test_id_col
+
 
 
 def create_data_bunch(train_data, train_label, test_data, test_id, category_cols: List = None) -> None:
@@ -51,8 +72,13 @@ def create_data_bunch(train_data, train_label, test_data, test_id, category_cols
 
 
 def select_feature_and_prepare_data(key: str):
-    train_data, train_label, test_data, test_id = select_by_boruta(key)
+    # train_data, train_label, test_data, test_id = select_by_boruta(key)
+    train_data, train_label, test_data, test_id = flatmap_select(key)
     print("--------- done feature select ---------")
     category_cols = [] # 可以指定哪几列是类别变量
     create_data_bunch(train_data, train_label, test_data, test_id, category_cols)
     print("--------- done prepare train and test data ---------")
+
+
+select_feature_and_prepare_data(key='flatmap')
+# flatmap_select()

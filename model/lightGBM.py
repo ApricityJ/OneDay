@@ -11,7 +11,7 @@ from sklearn.metrics import (fbeta_score, precision_score, recall_score, confusi
 from sklearn.utils import Bunch
 import shap
 
-from utils.metrics import (lgb_f2_score_eval, get_best_f2_threshold,
+from utils.metrics import (lgb_f2_score_eval, get_best_f2_threshold, focal_loss_lgb_1, focal_loss_lgb_2,
                            lgb_f1_score_multi_macro_eval, lgb_f1_score_multi_weighted_eval)
 from utils.hyperopt import Hyperopt
 from utils.optuna import Optuna
@@ -54,8 +54,8 @@ class LightGBM(object):
         self.version = version
 
         self.n_folds = 5
-        # self.fobj = lambda x, y: f1_loss(x, y)  # 默认None
-        self.fobj = None
+        self.fobj = lambda x, y: focal_loss_lgb_2(x, y, alpha=0.25, gamma=2.0)  # 默认None
+        # self.fobj = None
         self.feval = lgb_f2_score_eval  # 默认None
         # self.feval = lambda x, y: f1_score_multi_macro_eval(x, y, self.num_class)
         self.eval_key = "f2-mean"
