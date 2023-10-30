@@ -1,6 +1,18 @@
+import networkx as nx
+from networkx import DiGraph
 from pandas import DataFrame
+import pickle
 
 from constant import *
+
+
+def to_graphml(p: str, n: str, g: DiGraph):
+    with open(os.path.join(p, f'{n}.pkl'), 'wb') as f:
+        pickle.dump(g, f)
+
+
+def export_g_to_preprocess(n: str, g: DiGraph):
+    to_graphml(dir_preprocess, n, g)
 
 
 def to_csv(p: str, n: str, df: DataFrame):

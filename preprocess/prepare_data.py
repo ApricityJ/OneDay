@@ -3,7 +3,7 @@ from category_encoders import OneHotEncoder
 
 from util.loader import *
 from util.exporter import *
-from preprocess import feature_select
+# from preprocess import feature_select
 from constant import *
 
 

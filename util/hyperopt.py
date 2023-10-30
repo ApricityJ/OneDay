@@ -55,7 +55,7 @@ class Hyperopt(object):
                     feval=self.model.feval,
                     nfold=5,
                     stratified=True,
-                    early_stopping_rounds=50,
+                    early_stopping_rounds=30,
                     seed=self.model.magic_seed)
                 self.early_stop_dict[objective.i] = len(cv_result[self.model.eval_key])
                 score = round(cv_result[self.model.eval_key][-1], 4)
@@ -82,7 +82,7 @@ class Hyperopt(object):
                     maximize=self.model.eval_maximize,
                     nfold=5,
                     stratified=True,
-                    early_stopping_rounds=50,
+                    early_stopping_rounds=30,
                     seed=self.model.magic_seed)
                 # print(cv_result)
                 self.early_stop_dict[objective.i] = len(cv_result[self.model.eval_key])

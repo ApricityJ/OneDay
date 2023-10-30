@@ -3,7 +3,7 @@ import os
 dir_base = '/Users/sophie/workspace/data/contest'
 active_year = '2023'
 active_contest = '2'  # '1'
-active_phase = 'A'  # B
+active_phase = 'B'  # B
 
 dir_contest = os.path.join(dir_base, active_year, active_contest)
 dir_train = os.path.join(dir_contest, 'train')
@@ -16,7 +16,7 @@ file_name_train = 'train.p'
 file_name_test = 'test.p'
 
 random_states = [0, 1, 42, 2023, 29]
-active_random_state = 42
+active_random_state = 29
 
 LABEL = 'FLAG'
 ID = 'CUST_NO'

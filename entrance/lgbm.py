@@ -1,6 +1,7 @@
 import pickle
 import warnings
 from pathlib import Path
+import time
 
 import pandas as pd
 import numpy as np
@@ -39,6 +40,7 @@ if __name__ == '__main__':
     print(f"args : {args}")
     print("-----------------------------")
 
+    start_time = time.time()
 
     # select_feature_and_prepare_data('flatmap')
     create_data_bunch_from_csv()
@@ -100,6 +102,9 @@ if __name__ == '__main__':
             lightGBM.train_and_predict_multiclass(best_params)
         else:
             pass
+
+        end_time = time.time()
+        print(f'run time all : {(end_time - start_time)//60} minutes.')
 
     elif args['target'] == 'predict':
         assert args['out_model_name'] != '' and args['result_path'] != '', 'please give the model path.'

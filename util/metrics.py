@@ -214,6 +214,12 @@ def xgb_f1_score_eval(y_pred, data):
     return 'f1', f1
 
 
+def xgb_f2_score_eval(y_pred, data):
+    y_true = data.get_label()
+    f2, threshold = get_best_f2_threshold(y_pred, y_true)
+    return 'f2', f2
+
+
 def xgb_f1_score_multi_macro_eval(y_pred, data, num_class):
     # y_pred = y_pred.reshape((-1, num_class), order='F')
     predictions = np.argmax(y_pred, axis=1)
@@ -227,7 +233,8 @@ def xgb_f1_score_multi_weighted_eval(y_pred, data, num_class):
     y_true = data.get_label()
     return 'f1-weighted', f1_score(y_true, predictions, average='weighted')
 
-def focal_loss_lgb_2(y_pred, dtrain, alpha=0.25, gamma=2.0):
+
+def focal_loss_lgb(y_pred, dtrain, alpha=0.25, gamma=2.0):
     """ Focal loss for lightgbm.
 
     Parameters:
@@ -274,3 +281,17 @@ def focal_loss_lgb_eval_error(y_true, y_pred, alpha=0.25, gamma=2.0):
     loss = -a_t * (1 - p_t) ** gamma * np.log(p_t)
 
     return 'focal_loss', np.mean(loss), False
+
+
+def focal_loss_xgb(y_pred, dtrain, alpha=0.25, gamma=2.0):
+    y_true = dtrain.get_label()
+    prob = 1. / (1. + np.exp(-y_pred))
+
+    # Calculate pt
+    pt = np.where(y_true == 1, prob, 1 - prob)
+
+    # Calculate Focal Loss gradient & hessian
+    grad = -alpha * (1 - pt) ** gamma * (y_true - prob)
+    hess = alpha * (1 - pt) ** gamma * (gamma * pt * (1 - pt) + pt * (1 - pt) * (y_true - prob))
+
+    return grad, hess

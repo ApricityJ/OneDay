@@ -1,6 +1,7 @@
 import pickle
 import warnings
 from pathlib import Path
+import time
 
 import pandas as pd
 import numpy as np
@@ -8,6 +9,8 @@ import xgboost as xgb
 
 from util.util import of_json, to_json
 from model.XGBoost import XGBoost
+from constant import *
+from preprocess.feature_select import select_feature_and_prepare_data, create_data_bunch_from_csv
 
 warnings.filterwarnings("ignore")
 
@@ -15,25 +18,32 @@ warnings.filterwarnings("ignore")
 if __name__ == '__main__':
 
     args = {
-        'dataset': 'first_loan',  # penguins
+        'dataset': 'anti_fraud',  # penguins
         'version': '1',
         'objective': 'binary:logistic',  # binary:logistic, multi:softmax, multi:softprob...
-        'eval_metric': ['logloss', 'auc'],  # ['logloss', 'auc'], ['mlogloss']
+        'eval_metric': None,  # ['logloss', 'auc'], ['mlogloss']
         'num_class': 2,
         'target': 'train',  # train, predict, feature_importance
-        'optimizer': 'optuna',  # hyperopt, optuna...
+        'optimizer': 'hyperopt',  # hyperopt, optuna...
         'save_experiment': True,
-        'data_path': Path("../data"),
-        'result_path': Path("../result"),
-        'train_file_name': 'train.p',
-        'test_file_name': 'predict.p',
+        # 'data_path': Path("../data"),
+        'train_path': Path(dir_train),
+        'test_path': Path(dir_test),
+        'result_path': Path(dir_result),
+        'train_file_name': file_name_train,
+        'test_file_name': file_name_test,
         'out_model_name': 'result_model_xgb.p',
-        'magic_seed': 29,
+        'magic_seed': active_random_state,
         'load_best_params': False,
         'params_file_name': 'best_params_xgb.dict',
     }
     print("-----------------------------")
     print(f"args : {args}")
+
+    start_time = time.time()
+
+    # select_feature_and_prepare_data('flatmap')
+    # create_data_bunch_from_csv()
 
     if 'multi' in args['objective']:
         assert args['num_class'] > 2, 'multiclass objective should have class num > 2.'
@@ -41,7 +51,7 @@ if __name__ == '__main__':
 
     if args['target'] == 'train':
         print("--------- begin load train and predict data ---------")
-        data_bunch = pickle.load(open(args['data_path'] / args['train_file_name'], 'rb'))
+        data_bunch = pickle.load(open(args['train_path'] / args['train_file_name'], 'rb'))
         col_names = data_bunch.col_names
         print(f"columns : {col_names}")
         category_cols = data_bunch.category_cols
@@ -51,7 +61,7 @@ if __name__ == '__main__':
         print(f"X train shape : {X.shape}")
         print(f"y train shape : {y.shape}")
 
-        data_bunch = pickle.load(open(args['data_path'] / args['test_file_name'], 'rb'))
+        data_bunch = pickle.load(open(args['test_path'] / args['test_file_name'], 'rb'))
         X_predict = data_bunch.data
         id_predict = data_bunch.id
         print(f"X predict shape : {X_predict.shape}")
@@ -91,6 +101,10 @@ if __name__ == '__main__':
             xgboost.train_and_predict_multiclass(best_params)
         else:
             pass
+
+        end_time = time.time()
+        print(f'run time all : {(end_time - start_time) // 60} minutes.')
+
     elif args['target'] == 'predict':
         assert args['out_model_name'] != '' and args['result_path'] != '', 'please give the model path.'
 

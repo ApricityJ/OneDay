@@ -1,15 +1,13 @@
+import pickle
 from pathlib import Path
 from typing import Dict
 
-import pandas as pd
 import numpy as np
-from numpy import datetime64
+import pandas as pd
 from pandas import DataFrame
 
 from constant import *
 # from util.logger import logger
-
-
 
 def shrink_df(df, verbose=True):
     numerics = ['int16', 'int32', 'int64', 'float16', 'float32', 'float64']
@@ -88,7 +86,7 @@ def to_ds_train_test():
 def to_df_train_test(key=None):
     if key:
         df_train = to_df(Path(dir_train).joinpath(f'{key}.csv'))
-        df_test = to_df(Path(dir_test).joinpath(f'{key}_A.csv'))
+        df_test = to_df(Path(dir_test).joinpath(f'{key}_{active_phase}.csv'))
     else:
         df_train = to_df(Path(dir_preprocess).joinpath('train.csv'))
         df_test = to_df(Path(dir_preprocess).joinpath('test.csv'))
@@ -96,8 +94,11 @@ def to_df_train_test(key=None):
 
 
 # 图特征的原始数据
-def to_df_graph():
-    return to_df(Path(dir_preprocess).joinpath('graph.csv'))
+def to_graph(key: str):
+    p = os.path.join(dir_preprocess, f'{key}.pkl')
+    if os.path.exists(p):
+        with open(p, 'rb') as f:
+            return pickle.load(f)
 
 
 def ls(p: Path):

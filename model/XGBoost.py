@@ -8,10 +8,10 @@ import xgboost as xgb
 import shap
 import matplotlib.pylab as plt
 from sklearn.model_selection import StratifiedKFold
-from sklearn.metrics import (f1_score, precision_score, recall_score, confusion_matrix, classification_report)
+from sklearn.metrics import (fbeta_score, precision_score, recall_score, confusion_matrix, classification_report)
 from sklearn.utils import Bunch
 
-from util.metrics import (xgb_f1_score_eval, get_best_f1_threshold,
+from util.metrics import (xgb_f2_score_eval, get_best_f2_threshold, focal_loss_xgb,
                           xgb_f1_score_multi_macro_eval, xgb_f1_score_multi_weighted_eval)
 from util.hyperopt import Hyperopt
 from util.optuna import Optuna
@@ -50,12 +50,12 @@ class XGBoost(object):
         self.version = version
 
         self.n_folds = 5
-        # self.obj = lambda x, y: f1_loss(x, y)  # 默认None
-        self.obj = None
-        self.feval = xgb_f1_score_eval  # 默认None
+        self.obj = lambda x, y: focal_loss_xgb(x, y, alpha=0.25, gamma=2.0)  # 默认None
+        # self.obj = None
+        self.feval = xgb_f2_score_eval  # 默认None
         # self.feval = lambda x, y: xgb_f1_score_multi_macro_eval(x, y, self.num_class)
         # self.feval = None
-        self.eval_key = "test-f1-mean"
+        self.eval_key = "test-f2-mean"
         # self.eval_key = "test-f1-macro-mean"
         self.eval_maximize = True
         self.eval_metric = eval_metric
@@ -113,9 +113,9 @@ class XGBoost(object):
             else:
                 eval_prediction_folds = eval_prediction_folds.append(eval_df)
 
-            best_f1, best_threshold = get_best_f1_threshold(eval_prediction, self.y_tr.loc[eval_index])
-            score_folds.append(best_f1)
-            print(f"FOLD F1 = {best_f1}")
+            best_f2, best_threshold = get_best_f2_threshold(eval_prediction, self.y_tr.loc[eval_index])
+            score_folds.append(best_f2)
+            print(f"FOLD F2 = {best_f2}")
 
         print(f'score all : {score_folds}')
         print(f'score mean : {sum(score_folds) / self.n_folds}')
@@ -127,20 +127,21 @@ class XGBoost(object):
         eval_predictions = eval_prediction_folds.sort_values(by=['id'])
         # print(eval_predictions.head())
         # print(eval_predictions.shape)
-        best_f1, best_threshold = get_best_f1_threshold(eval_predictions['predicts'].values, self.y_tr)
+        best_f2, best_threshold = get_best_f2_threshold(eval_predictions['predicts'].values, self.y_tr)
         diff_threshold = np.quantile(eval_predictions['predicts'].values, 0.8) - best_threshold
-        print(f'best F1-Score : {best_f1}')
+        print(f'best F2-Score : {best_f2}')
         print(f"quantile 80% train : {np.quantile(eval_predictions['predicts'].values, 0.8)}")
         print(f'best threshold : {best_threshold}')
         print(f'diff between quantile and threshold : {diff_threshold}')
 
         eval_predictions_classify = (eval_predictions['predicts'].values > best_threshold).astype('int')
         # acc = accuracy_score(self.y_tr, eval_predictions)
-        f1 = f1_score(self.y_tr, eval_predictions_classify)
+        f2 = fbeta_score(self.y_tr, eval_predictions_classify, beta=2)
+        # f1 = f1_score(self.y_tr, eval_predictions_classify)
         precision = precision_score(self.y_tr, eval_predictions_classify)
         recall = recall_score(self.y_tr, eval_predictions_classify)
         cm = confusion_matrix(self.y_tr, eval_predictions_classify)
-        print('F1-Score: {:.4f}, precision: {:.4f}, recall: {:.4f}'.format(f1, precision, recall))
+        print('F2-Score: {:.4f}, precision: {:.4f}, recall: {:.4f}'.format(f2, precision, recall))
         print('confusion_matrix:')
         print(cm)
 
@@ -165,7 +166,7 @@ class XGBoost(object):
             params['verbosity'] = 0
             print('train and save model with all data.')
             model = xgb.train(params, self.xgb_train, obj=self.obj)
-            results = Bunch(f1=f1, precision=precision, recall=recall, cm=cm, test_threshold=test_threshold)
+            results = Bunch(f2=f2, precision=precision, recall=recall, cm=cm, test_threshold=test_threshold)
             results.model = model
             results.best_params = params
             pickle.dump(results, open(self.out_dir / self.out_model_name, 'wb'))

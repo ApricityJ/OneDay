@@ -34,6 +34,29 @@ def select_by_boruta(key: str):
     return train[selected], label_col, test[selected], test_id_col
 
 
+def select_by_boruta_without_flatmap(key: str = None):
+    train = loader.to_df(Path(dir_preprocess).joinpath(f'train.csv'))
+    # test = loader.to_df(Path(dir_preprocess).joinpath(f'test.csv'))
+
+    label_col = train[LABEL]
+    train.drop(LABEL, axis=1, inplace=True)
+    train.drop(ID, axis=1, inplace=True)
+    # test_id_col = test[ID]
+    print(train.columns)
+
+    estimator = RandomForestClassifier(n_jobs=-1, class_weight="balanced", max_depth=5)
+    # estimator = LGBMClassifier(n_estimators=1000, n_jobs=-1, verbose=0)
+    boruta = BorutaPy(estimator=estimator, n_estimators="auto", verbose=2, random_state=active_random_state)
+
+    boruta.fit(train.values, label_col.values)
+    selected = train.columns[boruta.support_]
+    print(f'select columns : {selected}')
+    with open('/Users/sophie/workspace/sophie/python/OneDay/data/without_flatmap_selected_cols.txt', 'w') as f:
+        f.write(str(selected))
+
+    return None
+
+
 def select_by_boruta_result(key: str):
     with open('/Users/sophie/workspace/sophie/python/OneDay/data/flatmap_selected_cols.txt', 'r') as f:
         selected = f.readline()
@@ -133,5 +156,6 @@ def select_feature_and_prepare_data(key: str):
 
 # select_feature_and_prepare_data(key='flatmap')
 # flatmap_select()
-create_data_bunch_from_csv()
+# create_data_bunch_from_csv()
+select_by_boruta_without_flatmap()
 print("--------- done prepare data ---------")
