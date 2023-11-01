@@ -1,6 +1,6 @@
 import numpy as np
 
-from util import loader, exporter
+from data import loader, exporter
 
 # 基础表
 df_cust = loader.to_concat_df('NATURE_CUST_QZ')

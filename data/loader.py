@@ -7,6 +7,8 @@ import pandas as pd
 from pandas import DataFrame
 
 from constant import *
+
+
 # from util.logger import logger
 
 def shrink_df(df, verbose=True):
@@ -110,3 +112,5 @@ def to_concat_df(key=None) -> DataFrame:
     df_train['SRC'] = 'train'
     df_test['SRC'] = 'test'
     return pd.concat([df_train, df_test])
+
+

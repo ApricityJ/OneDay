@@ -1,7 +1,7 @@
-import networkx as nx
+import pickle
+
 from networkx import DiGraph
 from pandas import DataFrame
-import pickle
 
 from constant import *
 
