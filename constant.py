@@ -1,9 +1,9 @@
 import os
 
-dir_base = '/Users/sophie/workspace/data/contest'
+dir_base = '/data/contest'
 active_year = '2023'
-active_contest = '2'  # '1'
-active_phase = 'B'  # B
+active_contest = 'dummy'  # '1'
+active_phase = 'test'  # B
 
 dir_contest = os.path.join(dir_base, active_year, active_contest)
 dir_train = os.path.join(dir_contest, 'train')

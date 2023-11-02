@@ -44,5 +44,13 @@ def export_ds_to_result(ds: dict):
     export_ds(dir_result, ds)
 
 
+def export_ds_to_train(ds: dict):
+    export_ds(dir_train, ds)
+
+
+def export_ds_to_test(ds: dict):
+    export_ds(dir_test, ds)
+
+
 def to_submission(df: DataFrame):
     return df.to_csv(dir_result.joinpath('result.csv'), header=False)

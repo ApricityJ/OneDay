@@ -37,9 +37,9 @@ def shrink_df(df, verbose=True):
                     df[col] = df[col].astype(np.float64)
     end_mem = df.memory_usage().sum() / 1024 ** 2
     if verbose:
+        pass
         # logger.info('Memory usage shrink to {:5.2f} Mb ({:.1f}% reduction)'.format(end_mem, 100 * (
         #         start_mem - end_mem) / start_mem))
-        pass
     return df.round(3)
 
 
@@ -49,11 +49,10 @@ def to_df(csv: Path):
 
 def to_ds(p: Path):
     ds: Dict[str, DataFrame] = {}
-    csv_list = p.glob('**/*.csv')
+    csv_list = Path(p).glob('**/*.csv')
     for csv in csv_list:
         k = csv.stem.replace('.csv', '')
-        v = to_df(csv.as_uri())
-        ds[k] = shrink_df(v)
+        ds[k] = to_df(csv)
     return ds
 
 
@@ -88,7 +87,7 @@ def to_ds_train_test():
 def to_df_train_test(key=None):
     if key:
         df_train = to_df(Path(dir_train).joinpath(f'{key}.csv'))
-        df_test = to_df(Path(dir_test).joinpath(f'{key}_{active_phase}.csv'))
+        df_test = to_df(Path(dir_test).joinpath(f'{key}.csv'))
     else:
         df_train = to_df(Path(dir_preprocess).joinpath('train.csv'))
         df_test = to_df(Path(dir_preprocess).joinpath('test.csv'))
@@ -112,5 +111,3 @@ def to_concat_df(key=None) -> DataFrame:
     df_train['SRC'] = 'train'
     df_test['SRC'] = 'test'
     return pd.concat([df_train, df_test])
-
-
