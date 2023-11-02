@@ -1,81 +1,64 @@
+from typing import List
+import os
+import pickle
+
+from pathlib import Path
+import numpy as np
+from sklearn.utils import Bunch
 import pandas as pd
-from category_encoders import OneHotEncoder
 
-from util.loader import *
-from util.exporter import *
-# from preprocess import feature_select
-from constant import *
+# data_path = 'D:/workspace/document/first_loan/processing/first'
+# train_file_name = 'train2.csv'
+# predict_file_name = "predict2.csv"
+# train_file_path = os.path.join(data_path, train_file_name)
+# predict_file_path = os.path.join(data_path, predict_file_name)
+#
+# result_data_path = PATH = Path('../data/')
+# result_train_file_name = 'train.p'
+# result_predict_file_name = "predict.p"
 
-
-def calculate_age(age):
-    if age <= 20:
-        return 20
-    if 20 < age <= 30:
-        return 25
-    if 30 < age <= 40:
-        return 35
-    if 40 < age <= 50:
-        return 45
-    if 50 < age <= 60:
-        return 55
-    if 60 < age <= 70:
-        return 65
-    if 70 < age <= 80:
-        return 75
-    if 80 < age <= 90:
-        return 85
-    if age > 90:
-        return 95
+target_col = 'LABEL'
+id_col = 'ID_UNI'
 
 
-def category_encoding_by_onehot(data: pd.DataFrame, col_name: str, is_train_name: str = 'IS_TRAIN') -> pd.DataFrame:
-    """
-    类别变量onehot化
-    :param data: 原始数据集
-    :param col_name: 列名，这里只支持单个变量
-    :param is_train_name: 用来筛选训练数据的列名
-    :return: 只返回处理的单列
-    """
-    tmp_data = data[[col_name, is_train_name]].copy()
-    encoder = OneHotEncoder(cols=[col_name], use_cat_names=True)
-    encoder.fit(tmp_data.loc[(tmp_data[is_train_name] == 'train'), col_name])
-    return encoder.transform(tmp_data[col_name])
+data_path = 'D:/workspace/work/first_loan/data'
+train_file_name = 'penguins_processed.csv'
+predict_file_name = "penguins_processed.csv"
+train_file_path = os.path.join(data_path, train_file_name)
+predict_file_path = os.path.join(data_path, predict_file_name)
+
+result_data_path = PATH = Path('../data/')
+result_train_file_name = 'train_multi.p'
+result_predict_file_name = "predict_multi.p"
 
 
-# 处理 preprocess文件夹中的flatmap.csv，并保存到train、test目录的 train_flatmap.csv、test_flatmap.csv
-def preprocess_flatmap(key='flatmap'):
-    df_all = to_df(Path(dir_preprocess).joinpath(f'{key}.csv'))
-    # df_all = df_all.iloc[:, 0:10]
+def create_data_bunch(category_cols: List = None) -> None:
+    if category_cols is None:
+        category_cols = []
+    data_bunch_train = Bunch()
+    train_data = pd.read_csv(train_file_path, index_col=None)
 
-    df_all['NTRL_CUST_AGE'] = df_all['NTRL_CUST_AGE'].apply(calculate_age)
-    df_all['NTRL_CUST_SEX_CD'] = df_all['NTRL_CUST_SEX_CD'].apply(lambda x: 0 if x == 'A' else 1)
-    result_rank_cd = category_encoding_by_onehot(df_all, 'NTRL_RANK_CD', is_train_name='SRC')
-    df_all = pd.concat([df_all, result_rank_cd], axis=1)
-    df_all.drop(['NTRL_RANK_CD'], axis=1, inplace=True)
-    df_all.drop(['DATA_DAT'], axis=1, inplace=True)
-    df_all = df_all.fillna(0)
+    data_bunch_train.target = train_data[target_col]
+    train_data.drop(target_col, axis=1, inplace=True)
+    data_bunch_train.data = train_data
+    data_bunch_train.col_names = train_data.columns.tolist()
+    data_bunch_train.category_cols = category_cols
+    pickle.dump(data_bunch_train, open(PATH / result_train_file_name, "wb"))
 
-    df_test = df_all[df_all['SRC'] == 'test']
-    df_train = df_all[df_all['SRC'] == 'train']
-    df_train.drop(['SRC'], axis=1, inplace=True)
-    df_test.drop(['SRC'], axis=1, inplace=True)
+    # data_bunch_predict = Bunch()
+    # predict_data = pd.read_csv(predict_file_path, index_col=None)
+    # data_bunch_predict.id = predict_data[id_col]
+    # predict_data.drop(id_col, axis=1, inplace=True)
+    # data_bunch_predict.data = predict_data
+    # pickle.dump(data_bunch_predict, open(PATH / result_predict_file_name, "wb"))
 
-    df_label = to_df(Path(dir_train).joinpath(f'TARGET_QZ.csv'))
-    df_label.drop(['DATA_DAT', 'CARD_NO'], axis=1, inplace=True)
-    df_train = pd.merge(df_train, df_label, left_on=['CUST_NO'], right_on=['CUST_NO'], how='left')
-    df_train.drop(['CUST_NO'], axis=1, inplace=True)
-    print(df_train.columns)
-    # print(df_test.columns)
-    # print(df_train['FLAG'].isnull().sum())
-
-    export_df_to_train(f'train_{key}', df_train)
-    export_df_to_test(f'test_{key}', df_test)
+    data_bunch_predict = Bunch()
+    predict_data = pd.read_csv(predict_file_path, index_col=None)
+    data_bunch_predict.id = pd.Series(np.arange(predict_data.shape[0]))
+    predict_data.drop(target_col, axis=1, inplace=True)
+    data_bunch_predict.data = predict_data
+    pickle.dump(data_bunch_predict, open(PATH / result_predict_file_name, "wb"))
 
 
-def preprocess_all():
-    # preprocess_flatmap('flatmap') # 只要生成一次即可
-    feature_select.select_by_boruta_result('flatmap')
-
-
-# preprocess_all()
-# print("--------- done preprocess data ---------")
+# create_data_bunch()
+create_data_bunch(['island', 'sex'])

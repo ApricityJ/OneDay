@@ -1,21 +1,21 @@
 import os.path
-from multiprocessing import cpu_count, Pool
-import time
-import warnings
+from multiprocessing import cpu_count, Pool, Manager, Lock, Value
+
 
 import pandas as pd
 
 from constant import dir_preprocess
-from util import loader, exporter
-
-warnings.filterwarnings("ignore")
+from data import loader, exporter
 
 # 定义需要处理的时间段
 # 如果继续细分，将生成大于样本数量的特征
 # time_periods = ['10s', '30s', '1T', '3T', '10T', '1H', '6H', '12H', '1D', '3D', '7D', '14D', '30D']
-# time_periods = [None, '1T', '1H', '1D']
 time_periods = ['1T']
 
+
+# 定义全局的 Lock 和 Value 对象
+counter_lock = Lock()
+counter = Value('i', 0)
 
 # 放平心态 - 精细化留待以后
 def to_aps():
@@ -167,8 +167,8 @@ def compute_max_values(df: pd.DataFrame, time_period: str = None):
     return {**overall_stats, **in_stats, **out_stats}
 
 
-def worker(args):
-    name, group, time_period = args
+def worker(name, group, time_period):
+
     stats = compute_stats(group, time_period)
     max_values = compute_max_values(group, time_period)
     amount_features = compute_amount_features(group, time_period)
@@ -180,6 +180,14 @@ def worker(args):
         **{f"{time_period}_{key}": value for key, value in amount_features.items()}
 
     }
+
+    # 更新进度计数器
+    with counter_lock:
+        counter.value += 1
+        # 检查进度
+        if counter.value % 1000 == 0:
+            print(f"Processed {counter.value} ")
+
     return name, combined_result
 
 
@@ -189,8 +197,9 @@ def parallel_process(df, periods):
 
     # 为每一个time_period生成数据
     for period in periods:
+        print(f'process period -> {period}')
         with Pool(cpu_count()) as pool:
-            results.extend(pool.map(worker, [(name, group, period) for name, group in grouped]))
+            results.extend(pool.starmap(worker, [(name, group, period) for name, group in grouped]))
 
     # 整理数据结构为字典，方便之后创建DataFrame
     data_dict = {}
@@ -214,7 +223,4 @@ def to_time_series():
 
 
 if __name__ == '__main__':
-    start = time.time()
     to_time_series()
-    end = time.time()
-    print(f'run time all : {(end - start) // 60} minutes.')

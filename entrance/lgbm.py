@@ -8,7 +8,7 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 
 from model.lightGBM import LightGBM
-from util.util import of_json, to_json
+from util.jsons import of_json, to_json
 from preprocess.feature_select import select_feature_and_prepare_data, create_data_bunch_from_csv
 from constant import *
 
