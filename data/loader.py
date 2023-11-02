@@ -7,9 +7,8 @@ import pandas as pd
 from pandas import DataFrame
 
 from constant import *
+from util.logger import logger
 
-
-# from util.logger import logger
 
 def shrink_df(df, verbose=True):
     numerics = ['int16', 'int32', 'int64', 'float16', 'float32', 'float64']
@@ -37,9 +36,8 @@ def shrink_df(df, verbose=True):
                     df[col] = df[col].astype(np.float64)
     end_mem = df.memory_usage().sum() / 1024 ** 2
     if verbose:
-        pass
-        # logger.info('Memory usage shrink to {:5.2f} Mb ({:.1f}% reduction)'.format(end_mem, 100 * (
-        #         start_mem - end_mem) / start_mem))
+        logger.info('Memory usage shrink to {:5.2f} Mb ({:.1f}% reduction)'.format(end_mem, 100 * (
+                start_mem - end_mem) / start_mem))
     return df.round(3)
 
 
@@ -111,3 +109,8 @@ def to_concat_df(key=None) -> DataFrame:
     df_train['SRC'] = 'train'
     df_test['SRC'] = 'test'
     return pd.concat([df_train, df_test])
+
+
+def to_df_true():
+    p = Path(dir_test).joinpath('TARGET.csv')
+    return to_df(p)['CUST_NO', 'FLAG']
