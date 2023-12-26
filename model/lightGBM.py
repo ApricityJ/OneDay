@@ -20,6 +20,7 @@ from util.jsons import to_json
 warnings.filterwarnings("ignore")
 plt.rcParams['font.sans-serif']=['SimHei']  # 用来正常显示中文标签
 plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
+pd.set_option('display.max_rows', None)
 
 
 class LightGBM(object):
@@ -258,9 +259,9 @@ class LightGBM(object):
         }).sort_values(by='importance', ascending=False))
 
         # plt.figure(figsize=(12, 6))
-        lgb.plot_importance(data_bunch.model, max_num_features=30)
-        plt.title("Feature Importance")
-        plt.show()
+        # lgb.plot_importance(data_bunch.model, max_num_features=30)
+        # plt.title("Feature Importance")
+        # plt.show()
 
     @staticmethod
     def shap_feature_importance(data_bunch, X):

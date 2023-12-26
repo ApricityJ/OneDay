@@ -26,8 +26,8 @@ def to_graph(key: str):
         # 事实上有太多可以标注在这里的，例如交易行为的特征
         # 先退出深度优先，如有时间再优化
 
-        target = loader.to_concat_df('TARGET_QZ')
-        cust = loader.to_concat_df('NATURE_CUST_QZ')
+        target = loader.to_concat_df('TARGET')
+        cust = loader.to_concat_df('NATURE_CUST')
         df_cust_info = target.merge(cust, left_on=['CUST_NO', 'SRC'], right_on=['CUST_NO', 'SRC'], how='left')
 
         # 图原始数据

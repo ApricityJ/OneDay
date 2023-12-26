@@ -49,5 +49,5 @@ for key in others:
 p_train = os.path.join(dir_base, active_year, 'dummy', 'train')
 p_test = os.path.join(dir_base, active_year, 'dummy', 'test')
 
-exporter.export_ds(ds_train)
-exporter.export_ds(ds_test)
+exporter.export_ds(p_train, ds_train)
+exporter.export_ds(p_test, ds_test)

@@ -84,9 +84,9 @@ def compute_feature_trn_code(dataset, feature_trn_codes):
 
 def refactor_df(key: str, df):
     column_map = {
-        'MBANK_TRNFLW_QZ': ['TFT_CSTACC', 'TFT_DTE_TIME', 'TFT_STDBSNCOD', 'TFT_TRNAMT', 'TFT_CRPACC'],
-        'EBANK_CSTLOG_QZ': ['FRMACCTNO', 'ADDFIELDDATE', 'BSNCODE', 'TRNAMT', 'TOACCTNO'],
-        'APS_QZ': ['APSDPRDNO', 'APSDTRDAT_TM', 'APSDTRCOD', 'APSDTRAMT', 'APSDCPTPRDNO'],
+        'MBANK_TRNFLW': ['TFT_CSTACC', 'TFT_DTE_TIME', 'TFT_STDBSNCOD', 'TFT_TRNAMT', 'TFT_CRPACC'],
+        'EBANK_CSTLOG': ['FRMACCTNO', 'ADDFIELDDATE', 'BSNCODE', 'TRNAMT', 'TOACCTNO'],
+        'APS': ['APSDPRDNO', 'APSDTRDAT_TM', 'APSDTRCOD', 'APSDTRAMT', 'APSDCPTPRDNO'],
     }
     df = df[column_map[key]]
     df.columns = ['CRD_SRC', 'TRN_DT', 'TRN_COD', 'TRN_AMT', 'CRD_TGT']
@@ -97,28 +97,28 @@ def to_train_fact(key: str):
     fact, _ = loader.to_df_train_test(key)
     fact = refactor_df(key, fact)
     columns = fact.columns.to_list() + ['FLAG']
-    target, _ = loader.to_df_train_test('TARGET_QZ')
+    target, _ = loader.to_df_train_test('TARGET')
     fact = fact.merge(target, left_on=['CRD_SRC'], right_on=['CARD_NO'], how='left')
     return fact[columns]
 
 
 def to_set_features_part1():
     params = {
-        'MBANK_TRNFLW_QZ': {
+        'MBANK_TRNFLW': {
             'threshold_count': 1000,
             'threshold_diff': 0.1
         },
-        'APS_QZ': {
+        'APS': {
             'threshold_count': 10000,
             'threshold_diff': 0.1
         },
-        'EBANK_CSTLOG_QZ': {
+        'EBANK_CSTLOG': {
             'threshold_count': 1000,
             'threshold_diff': 0.1
         }
     }
 
-    target = loader.to_concat_df('TARGET_QZ')
+    target = loader.to_concat_df('TARGET')
 
     for key in params.keys():
         # 拼接train，获取flag用于训练

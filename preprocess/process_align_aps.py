@@ -1,8 +1,8 @@
 import pandas as pd
 from data import exporter, loader
 
-aps = loader.to_concat_df('APS_QZ')
-tranflw = loader.to_concat_df('MBANK_TRNFLW_QZ')
+aps = loader.to_concat_df('APS')
+tranflw = loader.to_concat_df('MBANK_TRNFLW')
 
 # 步骤0
 aps['APSDTRDAT_TM'] = pd.to_datetime(aps['APSDTRDAT_TM'], format='%Y%m%d%H%M%S')

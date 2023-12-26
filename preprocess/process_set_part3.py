@@ -84,8 +84,8 @@ def compute_feature_trn_code(dataset, feature_trn_codes):
 
 def refactor_df(key: str, df):
     column_map = {
-        'MBANK_QRYTRNFLW_QZ': ['TFT_CSTNO', 'TFT_DTE_TIME', 'TFT_STDBSNCOD'],
-        'EBANK_CSTLOGQUERY_QZ': ['CLQ_CSTNO', 'CLQ_DTE_TIME', 'CLQ_BSNCOD']
+        'MBANK_QRYTRNFLW': ['TFT_CSTNO', 'TFT_DTE_TIME', 'TFT_STDBSNCOD'],
+        'EBANK_CSTLOGQUERY': ['CLQ_CSTNO', 'CLQ_DTE_TIME', 'CLQ_BSNCOD']
     }
     df = df[column_map[key]]
     df.columns = ['CRD_SRC', 'TRN_DT', 'TRN_COD']
@@ -96,24 +96,24 @@ def to_train_fact(key: str):
     fact, _ = loader.to_df_train_test(key)
     fact = refactor_df(key, fact)
     columns = fact.columns.to_list() + ['FLAG']
-    target, _ = loader.to_df_train_test('TARGET_QZ')
+    target, _ = loader.to_df_train_test('TARGET')
     fact = fact.merge(target, left_on=['CRD_SRC'], right_on=['CUST_NO'], how='left')
     return fact[columns]
 
 
 def to_set_features_part3():
     params = {
-        'MBANK_QRYTRNFLW_QZ': {
+        'MBANK_QRYTRNFLW': {
             'threshold_count': 1000,
             'threshold_diff': 0.1
         },
-        'EBANK_CSTLOGQUERY_QZ': {
+        'EBANK_CSTLOGQUERY': {
             'threshold_count': 1000,
             'threshold_diff': 0.1
         }
     }
 
-    target = loader.to_concat_df('TARGET_QZ')
+    target = loader.to_concat_df('TARGET')
 
     for key in params.keys():
         # 拼接train，获取flag用于训练

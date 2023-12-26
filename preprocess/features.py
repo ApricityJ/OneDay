@@ -200,3 +200,24 @@ def derived_features_between_cols(data: pd.DataFrame, cols_and_ops: List[list]) 
         col_name_new = col_and_op[0] + col_and_op[2] + col_and_op[1]
         features_new[col_name_new] = ops[col_and_op[2]](tmp_data[col_and_op[0]], tmp_data[col_and_op[1]])
     return features_new
+
+
+def calculate_age(age):
+    if age <= 20:
+        return 20
+    if 20 < age <= 30:
+        return 25
+    if 30 < age <= 40:
+        return 35
+    if 40 < age <= 50:
+        return 45
+    if 50 < age <= 60:
+        return 55
+    if 60 < age <= 70:
+        return 65
+    if 70 < age <= 80:
+        return 75
+    if 80 < age <= 90:
+        return 85
+    if age > 90:
+        return 95

@@ -7,10 +7,13 @@ import pandas as pd
 from constant import dir_preprocess
 from data import loader, exporter
 
+import warnings
+warnings.filterwarnings("ignore")
+
 # 定义需要处理的时间段
 # 如果继续细分，将生成大于样本数量的特征
-# time_periods = ['10s', '30s', '1T', '3T', '10T', '1H', '6H', '12H', '1D', '3D', '7D', '14D', '30D']
-time_periods = ['1T']
+time_periods = ['10s', '30s', '1T', '3T', '10T', '1H', '6H', '12H', '1D', '3D', '7D', '14D', '30D']
+# time_periods = ['1T']
 
 
 # 定义全局的 Lock 和 Value 对象

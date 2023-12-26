@@ -1,12 +1,14 @@
 import numpy as np
+import pandas as pd
 
-from utils import loader, exporter
+from data import loader, exporter
+from features import calculate_age, category_encoding_by_onehot
 
 # 基础表
-df_cust = loader.to_concat_df('NATURE_CUST_QZ')
-df_fa = loader.to_concat_df('CUST_FA_SUM_QZ')
-df_dp = loader.to_concat_df('DP_CUST_SUM_QZ')
-df_pd = loader.to_concat_df('TAGS_PROD_HOLD_QZ')
+df_cust = loader.to_concat_df('NATURE_CUST')
+df_fa = loader.to_concat_df('CUST_FA_SUM')
+df_dp = loader.to_concat_df('DP_CUST_SUM')
+df_pd = loader.to_concat_df('TAGS_PROD_HOLD')
 
 # 关联切片表
 df_flat = df_cust \
@@ -43,6 +45,20 @@ for i in range(len(dims)):
         D = '{0}_minus_{1}'.format(A.replace('_BAL', ''), B.replace('_BAL', ''))
         df_flat[C] = np.where(df_flat[B].notna() & (df_flat[B] != 0), round(df_flat[A] / df_flat[B], 3), np.nan)
         df_flat[D] = np.where(df_flat[A].notna() & df_flat[B].notna(), round(df_flat[A] - df_flat[B], 3), np.nan)
+
+
+# 一些列的处理
+# print(df_flat.columns.tolist())
+df_flat['NTRL_CUST_AGE'] = df_flat['NTRL_CUST_AGE'].apply(calculate_age)
+df_flat['NTRL_CUST_SEX_CD'] = df_flat['NTRL_CUST_SEX_CD'].apply(lambda x: 0 if x == 'A' else 1)
+df_flat['NTRL_CUST_SEX_CD'] = df_flat['NTRL_CUST_SEX_CD'].fillna(0)
+result_rank_cd = category_encoding_by_onehot(df_flat, 'NTRL_RANK_CD', is_train_name = 'SRC')
+df_flat = pd.concat([df_flat, result_rank_cd], axis=1)
+df_flat.drop(['NTRL_RANK_CD'], axis=1, inplace=True)
+df_flat.drop(['DATA_DAT'], axis=1, inplace=True)
+
+# 填充缺失值
+# df_flat = df_flat.fillna(0)  # 先不填充
 
 # 保存至 preprocess文件夹，命名为flatmap.csv
 exporter.export_df_to_preprocess('flatmap', df_flat)

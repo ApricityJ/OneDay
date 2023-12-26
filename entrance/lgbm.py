@@ -9,7 +9,6 @@ from sklearn.model_selection import train_test_split
 
 from model.lightGBM import LightGBM
 from util.jsons import of_json, to_json
-from preprocess.feature_select import select_feature_and_prepare_data, create_data_bunch_from_csv
 from constant import *
 
 warnings.filterwarnings("ignore")
@@ -18,12 +17,12 @@ warnings.filterwarnings("ignore")
 if __name__ == '__main__':
 
     args = {
-        'dataset': 'anti_fraud',
-        'version': '3',
+        'dataset': 'oneday',
+        'version': '1',
         'objective': 'binary',  # binary, multiclass...
         'metric': None,  # None需在模型中指定
         'num_class': 2,
-        'target': 'train',  # train, predict, feature_importance
+        'target': 'feature_importance',  # train, predict, feature_importance
         'optimizer': 'hyperopt',  # hyperopt, optuna...
         'save_experiment': True,
         # 'data_path': Path("../data"),
@@ -32,18 +31,15 @@ if __name__ == '__main__':
         'result_path': Path(dir_result),
         'train_file_name': file_name_train,
         'test_file_name': file_name_test,
-        'out_model_name': 'result_model_lgb.p',
+        'out_model_name': 'result_model_lgbm.p',
         'magic_seed': active_random_state,
         'load_best_params': False,
-        'params_file_name': 'best_params_lgb.dict',
+        'params_file_name': 'best_params_lgbm.dict',
     }
     print(f"args : {args}")
     print("-----------------------------")
 
     start_time = time.time()
-
-    # select_feature_and_prepare_data('flatmap')
-    create_data_bunch_from_csv()
 
     if args['objective'] == 'multiclass':
         assert args['num_class'] > 2, 'multiclass objective should have class num > 2.'
@@ -106,6 +102,12 @@ if __name__ == '__main__':
         end_time = time.time()
         print(f'run time all : {(end_time - start_time)//60} minutes.')
 
+        # 打印特征重要性
+        assert args['out_model_name'] != '' and args['result_path'] != '', 'please give the model path.'
+
+        data_bunch = pickle.load(open(args['result_path'] / args['out_model_name'], 'rb'))
+        LightGBM.print_feature_importance(data_bunch)
+
     elif args['target'] == 'predict':
         assert args['out_model_name'] != '' and args['result_path'] != '', 'please give the model path.'
 
@@ -140,8 +142,8 @@ if __name__ == '__main__':
         data_bunch = pickle.load(open(args['result_path'] / args['out_model_name'], 'rb'))
         LightGBM.print_feature_importance(data_bunch)
 
-        train_data_bunch = pickle.load(open(args['train_path'] / args['train_file_name'], 'rb'))
-        X = train_data_bunch.data
-        LightGBM.shap_feature_importance(data_bunch, X)
+        # train_data_bunch = pickle.load(open(args['train_path'] / args['train_file_name'], 'rb'))
+        # X = train_data_bunch.data
+        # LightGBM.shap_feature_importance(data_bunch, X)
     else:
         pass

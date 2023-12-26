@@ -2,6 +2,9 @@ from pandas import DataFrame
 from sklearn.metrics import fbeta_score
 from data import loader
 
+# 为什么它是一个类，不是各个方法包含在类中
+# column name 写的方式 eg. df_merged['FLAG'], df_merged['PRED'], left_on=['CUST_NO']
+# self.df_pred.merge(self.df_pred, left_on=['CUST_NO'], right_on=['CUST_NO'], how='inner')
 
 class F2Evaluator(object):
 

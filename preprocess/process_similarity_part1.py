@@ -9,11 +9,11 @@ from scipy import stats
 
 
 
-target = loader.to_concat_df('TARGET_QZ')
-df_na = loader.to_concat_df('NATURE_CUST_QZ')
-df_fa = loader.to_concat_df('CUST_FA_SUM_QZ')
-df_dp = loader.to_concat_df('DP_CUST_SUM_QZ')
-df_pd = loader.to_concat_df('TAGS_PROD_HOLD_QZ')
+target = loader.to_concat_df('TARGET')
+df_na = loader.to_concat_df('NATURE_CUST')
+df_fa = loader.to_concat_df('CUST_FA_SUM')
+df_dp = loader.to_concat_df('DP_CUST_SUM')
+df_pd = loader.to_concat_df('TAGS_PROD_HOLD')
 
 # 关联切片表
 df = target \
