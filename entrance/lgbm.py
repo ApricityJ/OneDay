@@ -11,8 +11,13 @@ from sklearn.model_selection import train_test_split
 from model.lightGBM import LightGBM
 from util.jsons import of_json, to_json
 from constant import *
+from util.hyperopt import Hyperopt
+from util.optuna import Optuna
+from util.metrics import (lgb_f2_score_eval, get_best_f2_threshold, focal_loss_lgb_1, focal_loss_lgb,
+                          lgb_f1_score_multi_macro_eval, lgb_f1_score_multi_weighted_eval)
 
 warnings.filterwarnings("ignore")
+
 
 default_params_dict = {
         'dataset': 'oneday',
@@ -30,7 +35,18 @@ default_params_dict = {
         'out_model_name': 'result_model_lgbm.p',
         'magic_seed': active_random_state,
         'load_best_params': False,
-        'params_file_name': 'best_params_lgbm.dict'
+        'params_file_name': 'best_params_lgbm.dict',
+        'n_folds': 5,
+
+        'fobj': lambda x, y: focal_loss_lgb(x, y, alpha=0.25, gamma=2.0),  # 默认None
+        #lambda x, y: f1_score_multi_macro_eval(x, y, self.num_class)
+        # self.eval_key = "f1-macro-mean"
+        'feval': lgb_f2_score_eval,  # 默认None
+        'eval_key': "f2-mean",  # 用于优化器
+
+        'hyperopt_max_evals': 30,
+        'optuna_n_trials': 20,
+        'optuna_direction': 'maximize'
 }
 
 
@@ -71,6 +87,13 @@ class LightGBMEntrance(object):
         self.magic_seed = params_dict['magic_seed']
         self.load_best_params = params_dict['load_best_params']
         self.params_file_name = params_dict['params_file_name']
+        self.n_folds = params_dict['n_folds']
+        self.fobj = params_dict['fobj']
+        self.feval = params_dict['feval']
+        self.eval_key = params_dict['eval_key']
+        self.hyperopt_max_evals = params_dict['hyperopt_max_evals']
+        self.optuna_n_trials = params_dict['optuna_n_trials']
+        self.optuna_direction = params_dict['optuna_direction']
 
         self.model = None
         self.best_params = None
@@ -78,6 +101,10 @@ class LightGBMEntrance(object):
         if self.objective == 'multiclass':
             assert self.num_class > 2, 'multiclass objective should have class num > 2.'
         assert self.params_file_name != '', 'please name the best params file.'
+
+        if self.metric is None:
+            assert self.feval is not None and self.eval_key is not None, \
+                "custom metric should be assigned when metric is None."
 
 
     def __str__(self):
@@ -117,7 +144,14 @@ class LightGBMEntrance(object):
             out_dir = self.result_path,
             out_model_name = self.out_model_name,
             save = self.save_experiment,
-            version = self.version
+            version = self.version,
+            n_folds = self.n_folds,
+            fobj = self.fobj,
+            feval = self.feval,
+            eval_key = self.eval_key,
+            hyperopt_max_evals = self.hyperopt_max_evals,
+            optuna_n_trials = self.optuna_n_trials,
+            optuna_direction = self.optuna_direction
         )
 
         if self.load_best_params:
@@ -130,19 +164,12 @@ class LightGBMEntrance(object):
         print("--------- best params ---------")
         print(self.best_params)
 
-
-        if args['objective'] == 'binary':
-            lightGBM.train_and_predict_binary(best_params)
-        elif args['objective'] == 'multiclass':
-            lightGBM.train_and_predict_multiclass(best_params)
-        else:
-            pass
+        self.model.train_and_predict(self.best_params)
 
         # 打印特征重要性
-        assert args['out_model_name'] != '' and args['result_path'] != '', 'please give the model path.'
-
-        data_bunch = pickle.load(open(args['result_path'] / args['out_model_name'], 'rb'))
-        LightGBM.print_feature_importance(data_bunch)
+        # assert args['out_model_name'] != '' and args['result_path'] != '', 'please give the model path.'
+        # data_bunch = pickle.load(open(args['result_path'] / args['out_model_name'], 'rb'))
+        # LightGBM.print_feature_importance(data_bunch)
 
 
 

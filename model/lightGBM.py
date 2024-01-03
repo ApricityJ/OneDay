@@ -1,6 +1,8 @@
 import pickle
 from pathlib import Path
 import warnings
+from collections.abc import Callable
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -24,10 +26,28 @@ pd.set_option('display.max_rows', None)
 
 
 class LightGBM(object):
-
-    def __init__(self, dataset, train_set, predict_set, col_names, category_cols,
-                 objective, metric, num_class=2, optimizer='hyperopt', magic_seed=29,
-                 out_dir=Path('result'), out_model_name='result_model_lgb.p', save=False, version='1'):
+    def __init__(self, dataset: str,
+                       train_set: list[pd.DataFrame],
+                       predict_set: list[pd.DataFrame],
+                       col_names: list[str],
+                       category_cols: list[str],
+                       objective: str,
+                       metric: str | None,
+                       num_class: int = 2,
+                       optimizer: str = 'hyperopt',
+                       magic_seed: int = 29,
+                       out_dir: Path = Path('result'),
+                       out_model_name: str = 'result_model_lgb.p',
+                       save: bool = False,
+                       version: str = '1',
+                       n_folds: int = 5,
+                       fobj: Optional[Callable] = None,
+                       feval: Optional[Callable] = None,
+                       eval_key: str = None,
+                       hyperopt_max_evals: int = 30,
+                       optuna_n_trials: int = 20,
+                       optuna_direction: str = 'maximize'
+                 ):
 
         self.dataset = dataset
         self.col_names = col_names
@@ -39,8 +59,7 @@ class LightGBM(object):
             feature_name=self.col_names,
             categorical_feature=self.category_cols,
             free_raw_data=False)
-        # self.lgb_valid = self.lgb_train.create_valid(
-        #     self.X_val, self.y_val)
+        # self.lgb_valid = self.lgb_train.create_valid(self.X_val, self.y_val)
         self.X_predict = predict_set[0]
         self.id_predict = predict_set[1]
 
@@ -54,20 +73,18 @@ class LightGBM(object):
         self.save = save
         self.version = version
 
-        self.n_folds = 5
-        self.fobj = lambda x, y: focal_loss_lgb(x, y, alpha=0.25, gamma=2.0)  # 默认None
-        # self.fobj = None
-        self.feval = lgb_f2_score_eval  # 默认None
-        # self.feval = lambda x, y: f1_score_multi_macro_eval(x, y, self.num_class)
-        self.eval_key = "f2-mean"
-        # self.eval_key = "f1-macro-mean"
+        self.n_folds = n_folds
+        self.fobj = fobj
+        self.feval = feval
+        self.eval_key = eval_key
         self.metric = metric
-        if self.metric is None:
-            assert self.feval is not None and self.eval_key is not None, \
-                "custom metric should be assigned when metric is None."
+
+        self.hyperopt_max_evals = hyperopt_max_evals
+        self.optuna_n_trials = optuna_n_trials
+        self.optuna_direction = optuna_direction
+
 
     def optimize(self) -> dict:
-
         if self.optimizer == "hyperopt":
             optimizer_ = Hyperopt("lightgbm", self)
         elif self.optimizer == "optuna":
@@ -77,16 +94,23 @@ class LightGBM(object):
             pass
         return optimizer_.optimize()
 
-    def train_and_predict_binary(self, params):
+
+    def train_and_predict(self, params):
         print("--------- begin training and predicting ---------")
 
         params['objective'] = self.objective
+        params['num_class'] = self.num_class
         params['metric'] = self.metric
         params['verbose'] = -1
 
-        eval_prediction_folds = pd.DataFrame()
-        prediction_folds_mean = np.zeros(len(self.X_predict))
-        score_folds = []
+        if self.objective == 'multiclass':
+            eval_prediction_folds = dict()
+            prediction_folds_mean = np.zeros((self.X_predict.shape[0], self.num_class))
+            score_folds = {"f1-macro": 0, "f1-weighted": 0}  # TODO: fix
+        else:
+            eval_prediction_folds = pd.DataFrame()
+            prediction_folds_mean = np.zeros(len(self.X_predict))
+            score_folds = []
 
         kf = StratifiedKFold(n_splits=self.n_folds, random_state=self.magic_seed, shuffle=True)
         for index, (train_index, eval_index) in enumerate(kf.split(self.X_tr, self.y_tr)):
@@ -111,20 +135,39 @@ class LightGBM(object):
 
             prediction_folds_mean += (model.predict(self.X_predict) / self.n_folds)
             eval_prediction = model.predict(self.X_tr.loc[eval_index])
-            eval_df = pd.DataFrame({'id': eval_index, 'predicts': eval_prediction})
-            if index == 0:
-                eval_prediction_folds = eval_df.copy()
+
+            if self.objective == 'multiclass':
+                for item_index, item in zip(eval_index, eval_prediction):
+                    eval_prediction_folds[int(item_index)] = list(item)
+
+                eval_prediction = np.argmax(eval_prediction, axis=1)
+                f1_macro = f1_score(self.y_tr.loc[eval_index], eval_prediction, average="macro")
+                f1_weighted = f1_score(self.y_tr.loc[eval_index], eval_prediction, average="weighted")
+                print(f"FOLD f1-macro: {f1_macro}, f1-weighted: {f1_weighted}")
+                score_folds['f1-macro'] += (f1_macro / self.n_folds)
+                score_folds['f1-weighted'] += (f1_weighted / self.n_folds)
             else:
-                eval_prediction_folds = eval_prediction_folds.append(eval_df)
+                eval_df = pd.DataFrame({'id': eval_index, 'predicts': eval_prediction})
+                if index == 0:
+                    eval_prediction_folds = eval_df.copy()
+                else:
+                    eval_prediction_folds = eval_prediction_folds.append(eval_df)
 
-            best_f2, best_threshold = get_best_f2_threshold(eval_prediction, self.y_tr.loc[eval_index])
-            score_folds.append(best_f2)
-            print(f"FOLD F2 = {best_f2}")
+                best_f2, best_threshold = get_best_f2_threshold(eval_prediction, self.y_tr.loc[eval_index])
+                score_folds.append(best_f2)
+                print(f"FOLD F2 = {best_f2}")
 
+        # binary
         print(f'score all : {score_folds}')
         print(f'score mean : {sum(score_folds) / self.n_folds}')
         self._validate_and_predict_binary(eval_prediction_folds, prediction_folds_mean, params)
         print("--------- done training and predicting ---------")
+
+        # multiclass
+        print(f'score mean: \n{score_folds}')
+        self._validate_and_predict_multiclass(eval_prediction_folds, prediction_folds_mean, params)
+        print("--------- done training and predicting ---------")
+
 
     def _validate_and_predict_binary(self, eval_prediction_folds, prediction_folds_mean, params):
 
@@ -175,55 +218,6 @@ class LightGBM(object):
             results.columns = self.col_names
             pickle.dump(results, open(self.out_dir / self.out_model_name, 'wb'))
 
-    def train_and_predict_multiclass(self, params):
-        print("--------- begin training and predicting ---------")
-
-        params['objective'] = self.objective
-        params['num_class'] = self.num_class
-        params['metric'] = self.metric
-        params['verbose'] = -1
-
-        eval_prediction_folds = dict()
-        prediction_folds_mean = np.zeros((self.X_predict.shape[0], self.num_class))
-        score_folds = {"f1-macro": 0, "f1-weighted": 0}
-
-        kf = StratifiedKFold(n_splits=self.n_folds, random_state=self.magic_seed, shuffle=True)
-        for index, (train_index, eval_index) in enumerate(kf.split(self.X_tr, self.y_tr)):
-            print(f"FOLD : {index}")
-            train_part = lgb.Dataset(self.X_tr.loc[train_index],
-                                     self.y_tr.loc[train_index],
-                                     feature_name=self.col_names,
-                                     categorical_feature=self.category_cols)
-
-            eval_part = lgb.Dataset(self.X_tr.loc[eval_index],
-                                    self.y_tr.loc[eval_index],
-                                    feature_name=self.col_names,
-                                    categorical_feature=self.category_cols)
-
-            model = lgb.train(params,
-                              train_part,
-                              fobj=self.fobj,
-                              feval=self.feval,
-                              valid_sets=[train_part, eval_part],
-                              valid_names=['train', 'valid'],
-                              verbose_eval=1)
-
-            prediction_folds_mean += (model.predict(self.X_predict) / self.n_folds)
-            eval_prediction = model.predict(self.X_tr.loc[eval_index])
-            for item_index, item in zip(eval_index, eval_prediction):
-                eval_prediction_folds[int(item_index)] = list(item)
-            # print(eval_prediction_folds)
-
-            eval_prediction = np.argmax(eval_prediction, axis=1)
-            f1_macro = f1_score(self.y_tr.loc[eval_index], eval_prediction, average="macro")
-            f1_weighted = f1_score(self.y_tr.loc[eval_index], eval_prediction, average="weighted")
-            print(f"FOLD f1-macro: {f1_macro}, f1-weighted: {f1_weighted}")
-            score_folds['f1-macro'] += (f1_macro / self.n_folds)
-            score_folds['f1-weighted'] += (f1_weighted / self.n_folds)
-
-        print(f'score mean: \n{score_folds}')
-        self._validate_and_predict_multiclass(eval_prediction_folds, prediction_folds_mean, params)
-        print("--------- done training and predicting ---------")
 
     def _validate_and_predict_multiclass(self, eval_prediction_folds, prediction_folds_mean, params):
 

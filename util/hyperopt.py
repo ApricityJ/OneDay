@@ -9,7 +9,7 @@ class Hyperopt(object):
         self.model_type = model_type
         self.model = model
         self.early_stop_dict = {}
-        self.max_evals = 30
+        self.max_evals = self.model.hyperopt_max_evals
 
     def optimize(self) -> dict:
 

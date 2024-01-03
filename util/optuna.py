@@ -11,8 +11,8 @@ class Optuna(object):
         self.model_type = model_type
         self.model = model
         self.early_stop_list = []
-        self.n_trials = 20
-        self.direction = 'maximize'
+        self.n_trials = self.model.optuna_n_trials
+        self.direction = self.model.optuna_direction
 
     def optimize(self) -> dict:
         print("--------- begin search params ---------")
