@@ -41,7 +41,7 @@ default_params_dict = {
         'fobj': lambda x, y: focal_loss_lgb(x, y, alpha=0.25, gamma=2.0),  # 默认None
         #lambda x, y: f1_score_multi_macro_eval(x, y, self.num_class)
         # self.eval_key = "f1-macro-mean"
-        'feval': lgb_f2_score_eval,  # 默认None
+        'feval': 'lgb_f2_score_eval',  # 默认None
         'eval_key': "f2-mean",  # 用于优化器
 
         'hyperopt_max_evals': 30,

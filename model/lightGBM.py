@@ -1,6 +1,7 @@
 import pickle
 from pathlib import Path
 import warnings
+import re
 from collections.abc import Callable
 from typing import Optional
 
@@ -13,8 +14,8 @@ from sklearn.metrics import (fbeta_score, precision_score, recall_score, confusi
 from sklearn.utils import Bunch
 import shap
 
-from util.metrics import (lgb_f2_score_eval, get_best_f2_threshold, focal_loss_lgb_1, focal_loss_lgb,
-                          lgb_f1_score_multi_macro_eval, lgb_f1_score_multi_weighted_eval)
+
+import util.metrics as metrics
 from util.hyperopt import Hyperopt
 from util.optuna import Optuna
 from util.jsons import to_json
@@ -42,7 +43,7 @@ class LightGBM(object):
                        version: str = '1',
                        n_folds: int = 5,
                        fobj: Optional[Callable] = None,
-                       feval: Optional[Callable] = None,
+                       feval: str = None,
                        eval_key: str = None,
                        hyperopt_max_evals: int = 30,
                        optuna_n_trials: int = 20,
@@ -75,7 +76,8 @@ class LightGBM(object):
 
         self.n_folds = n_folds
         self.fobj = fobj
-        self.feval = feval
+        self.feval = getattr(metrics, feval)
+        self.feval_custom = getattr(metrics, feval + '_custom')
         self.eval_key = eval_key
         self.metric = metric
 
@@ -106,12 +108,11 @@ class LightGBM(object):
         if self.objective == 'multiclass':
             eval_prediction_folds = dict()
             prediction_folds_mean = np.zeros((self.X_predict.shape[0], self.num_class))
-            score_folds = {"f1-macro": 0, "f1-weighted": 0}  # TODO: fix
         else:
             eval_prediction_folds = pd.DataFrame()
             prediction_folds_mean = np.zeros(len(self.X_predict))
-            score_folds = []
 
+        score_folds = []
         kf = StratifiedKFold(n_splits=self.n_folds, random_state=self.magic_seed, shuffle=True)
         for index, (train_index, eval_index) in enumerate(kf.split(self.X_tr, self.y_tr)):
             print(f"FOLD : {index}")
@@ -139,13 +140,6 @@ class LightGBM(object):
             if self.objective == 'multiclass':
                 for item_index, item in zip(eval_index, eval_prediction):
                     eval_prediction_folds[int(item_index)] = list(item)
-
-                eval_prediction = np.argmax(eval_prediction, axis=1)
-                f1_macro = f1_score(self.y_tr.loc[eval_index], eval_prediction, average="macro")
-                f1_weighted = f1_score(self.y_tr.loc[eval_index], eval_prediction, average="weighted")
-                print(f"FOLD f1-macro: {f1_macro}, f1-weighted: {f1_weighted}")
-                score_folds['f1-macro'] += (f1_macro / self.n_folds)
-                score_folds['f1-weighted'] += (f1_weighted / self.n_folds)
             else:
                 eval_df = pd.DataFrame({'id': eval_index, 'predicts': eval_prediction})
                 if index == 0:
@@ -153,28 +147,31 @@ class LightGBM(object):
                 else:
                     eval_prediction_folds = eval_prediction_folds.append(eval_df)
 
-                best_f2, best_threshold = get_best_f2_threshold(eval_prediction, self.y_tr.loc[eval_index])
-                score_folds.append(best_f2)
-                print(f"FOLD F2 = {best_f2}")
+            score, threshold = self.feval_custom(eval_prediction, self.y_tr.loc[eval_index])
+            score_folds.append(score)
+            print(f"FOLD SCORE = {score}")
 
-        # binary
+
         print(f'score all : {score_folds}')
         print(f'score mean : {sum(score_folds) / self.n_folds}')
-        self._validate_and_predict_binary(eval_prediction_folds, prediction_folds_mean, params)
-        print("--------- done training and predicting ---------")
-
-        # multiclass
-        print(f'score mean: \n{score_folds}')
-        self._validate_and_predict_multiclass(eval_prediction_folds, prediction_folds_mean, params)
+        self._validate_and_predict(eval_prediction_folds, prediction_folds_mean, params)
         print("--------- done training and predicting ---------")
 
 
-    def _validate_and_predict_binary(self, eval_prediction_folds, prediction_folds_mean, params):
+    def _validate_and_predict(self, eval_prediction_folds, prediction_folds_mean, params):
+        if self.objective == 'multiclass':
+            self._validate_and_predict_multiclass(eval_prediction_folds, prediction_folds_mean)
+        else:
+            self._validate_and_predict_binary(eval_prediction_folds, prediction_folds_mean)
+
+        if self.save:
+            self._save(params)
+
+
+    def _validate_and_predict_binary(self, eval_prediction_folds, prediction_folds_mean):
 
         eval_predictions = eval_prediction_folds.sort_values(by=['id'])
-        # print(eval_predictions.head())
-        # print(eval_predictions.shape)
-        best_f2, best_threshold = get_best_f2_threshold(eval_predictions['predicts'].values, self.y_tr)
+        best_f2, best_threshold = self.feval_custom(eval_predictions['predicts'].values, self.y_tr)
         diff_threshold = np.quantile(eval_predictions['predicts'].values, 0.8) - best_threshold
         print(f'best F2-Score : {best_f2}')
         print(f"quantile 80% train : {np.quantile(eval_predictions['predicts'].values, 0.8)}")
@@ -183,7 +180,8 @@ class LightGBM(object):
 
         eval_predictions_classify = (eval_predictions['predicts'].values > best_threshold).astype('int')
         # acc = accuracy_score(self.y_tr, eval_predictions)
-        f2 = fbeta_score(self.y_tr, eval_predictions_classify, beta = 2)
+        beta = re.search(r'(.*)_f(\d)_(.*)', self.feval)  # f1 or f2 or ... 这样好像也很奇怪
+        f2 = fbeta_score(self.y_tr, eval_predictions_classify, beta = int(beta))
         precision = precision_score(self.y_tr, eval_predictions_classify)
         recall = recall_score(self.y_tr, eval_predictions_classify)
         cm = confusion_matrix(self.y_tr, eval_predictions_classify)
@@ -191,8 +189,6 @@ class LightGBM(object):
         print('confusion_matrix:')
         print(cm)
 
-        # print(prediction_folds_mean)
-        # print(prediction_folds_mean.shape)
         print(f"quantile 80% test : {np.quantile(prediction_folds_mean, 0.8)}")
         test_threshold = np.quantile(prediction_folds_mean, 0.8) - diff_threshold
         print(f'test threshold : {test_threshold}')
@@ -208,18 +204,8 @@ class LightGBM(object):
         submission.to_csv(self.out_dir / '{}_lgbm_model_{}_submission.csv'.format(self.dataset, self.version),
                           index=False)
 
-        if self.save:
-            params['verbose'] = -1
-            print('train and save model with all data.')
-            model = lgb.train(params, self.lgb_train, fobj=self.fobj)
-            results = Bunch(f2=f2, precision=precision, recall=recall, cm=cm, test_threshold=test_threshold)
-            results.model = model
-            results.best_params = params
-            results.columns = self.col_names
-            pickle.dump(results, open(self.out_dir / self.out_model_name, 'wb'))
 
-
-    def _validate_and_predict_multiclass(self, eval_prediction_folds, prediction_folds_mean, params):
+    def _validate_and_predict_multiclass(self, eval_prediction_folds, prediction_folds_mean):
 
         eval_prediction_folds = dict(sorted(eval_prediction_folds.items(), key=lambda item: item[0]))
         eval_prediction = list(eval_prediction_folds.values())
@@ -238,12 +224,14 @@ class LightGBM(object):
         submission.to_csv(self.out_dir / '{}_lgbm_model_{}_submission.csv'.format(self.dataset, self.version),
                           index=False)
 
-        if self.save:
-            params['verbose'] = -1
-            print('train and save model with all data.')
-            model = lgb.train(params, self.lgb_train, fobj=self.fobj)
-            results = Bunch(model=model, params=params, columns=self.col_names)
-            pickle.dump(results, open(self.out_dir / self.out_model_name, 'wb'))
+
+    def _save(self, params):
+        params['verbose'] = -1
+        print('train and save model with all data.')
+        model = lgb.train(params, self.lgb_train, fobj=self.fobj)
+        results = Bunch(model=model, params=params, columns=self.col_names)
+        pickle.dump(results, open(self.out_dir / self.out_model_name, 'wb'))
+
 
     @staticmethod
     def print_feature_importance(data_bunch):

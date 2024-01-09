@@ -194,6 +194,11 @@ def lgb_f2_score_eval(y_pred, data):
     return 'f2', f2, True
 
 
+def lgb_f2_score_eval_custom(y_pred, y_true):
+    f2, threshold = get_best_f2_threshold(y_pred, y_true)
+    return f2, threshold
+
+
 def lgb_f1_score_multi_macro_eval(y_pred, data, num_class):
     y_pred = y_pred.reshape((-1, num_class), order='F')
     predictions = np.argmax(y_pred, axis=1)
@@ -201,11 +206,20 @@ def lgb_f1_score_multi_macro_eval(y_pred, data, num_class):
     return 'f1-macro', f1_score(y_true, predictions, average='macro'), True
 
 
+def lgb_f1_score_multi_macro_eval_custom(y_pred, y_true):
+    predictions = np.argmax(y_pred, axis=1)
+    return f1_score(y_true, predictions, average='macro')
+
+
 def lgb_f1_score_multi_weighted_eval(y_pred, data, num_class):
     y_pred = y_pred.reshape((-1, num_class), order='F')
     predictions = np.argmax(y_pred, axis=1)
     y_true = data.get_label()
     return 'f1-weighted', f1_score(y_true, predictions, average='weighted'), True
+
+def lgb_f1_score_multi_weighted_eval_custom(y_pred, y_true):
+    predictions = np.argmax(y_pred, axis=1)
+    return f1_score(y_true, predictions, average='weighted')
 
 
 def xgb_f1_score_eval(y_pred, data):
