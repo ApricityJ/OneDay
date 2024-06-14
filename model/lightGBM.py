@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import pickle
 from pathlib import Path
 import warnings
@@ -180,8 +182,9 @@ class LightGBM(object):
 
         eval_predictions_classify = (eval_predictions['predicts'].values > best_threshold).astype('int')
         # acc = accuracy_score(self.y_tr, eval_predictions)
-        beta = re.search(r'(.*)_f(\d)_(.*)', self.feval)  # f1 or f2 or ... 这样好像也很奇怪
-        f2 = fbeta_score(self.y_tr, eval_predictions_classify, beta = int(beta))
+        # beta = re.search(r'(.*)_f(\d)_(.*)', self.feval)  # f1 or f2 or ... 这样好像也很奇怪
+        # f2 = fbeta_score(self.y_tr, eval_predictions_classify, beta = int(beta))
+        f2 = fbeta_score(self.y_tr, eval_predictions_classify, beta=2)
         precision = precision_score(self.y_tr, eval_predictions_classify)
         recall = recall_score(self.y_tr, eval_predictions_classify)
         cm = confusion_matrix(self.y_tr, eval_predictions_classify)

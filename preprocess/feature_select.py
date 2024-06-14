@@ -129,11 +129,12 @@ def base_select(key: str):
 
     print(f"after column nums : {df_data.shape[1] - len(columns_to_drop)}")
     jsons.to_json(columns_to_drop, Path(dir_result).joinpath(f'{key}_base_to_drop.json'))
+    return columns_to_drop
 
 
 
 
-base_select('flatmap')
+columns_to_drop = base_select('flatmap')
 
 
 # def plot_correlation_matrix(df):

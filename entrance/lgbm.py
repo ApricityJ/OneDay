@@ -19,12 +19,18 @@ from util.metrics import (lgb_f2_score_eval, get_best_f2_threshold, focal_loss_l
 warnings.filterwarnings("ignore")
 
 
-default_params_dict = {
+def load_data(dir_path: Path, file_name: str) -> Bunch:
+    data = pickle.load(open(dir_path.joinpath(file_name), 'rb'))
+    return data
+
+
+if __name__ == '__main__':
+    args = {
         'dataset': 'oneday',
         'version': '1',
         'objective': 'binary',  # binary, multiclass...
-        'metric': 'auc',  # None需在模型中指定
-        'num_class': 2,
+        'metric': None,  # None需在模型中指定
+        'num_class': 1,
         'optimizer': 'hyperopt',  # hyperopt, optuna...
         'save_experiment': True,
         'train_path': Path(dir_train),
@@ -34,12 +40,14 @@ default_params_dict = {
         'test_file_name': file_name_test,
         'out_model_name': 'result_model_lgbm.p',
         'magic_seed': active_random_state,
-        'load_best_params': False,
+        'load_best_params': True,
         'params_file_name': 'best_params_lgbm.dict',
         'n_folds': 5,
+        'target': 'train',
 
-        'fobj': lambda x, y: focal_loss_lgb(x, y, alpha=0.25, gamma=2.0),  # 默认None
-        #lambda x, y: f1_score_multi_macro_eval(x, y, self.num_class)
+        # 'fobj': lambda x, y: focal_loss_lgb(x, y, alpha=0.25, gamma=2.0),  # 默认None
+        'fobj': None,
+        # lambda x, y: f1_score_multi_macro_eval(x, y, self.num_class)
         # self.eval_key = "f1-macro-mean"
         'feval': 'lgb_f2_score_eval',  # 默认None
         'eval_key': "f2-mean",  # 用于优化器
@@ -47,73 +55,26 @@ default_params_dict = {
         'hyperopt_max_evals': 30,
         'optuna_n_trials': 20,
         'optuna_direction': 'maximize'
-}
+    }
+    print("-----------------------------")
+    print(f"args : {args}")
 
+    # start_time = time.time()
 
-def load_data(dir_path: Path, file_name: str) -> Bunch:
-    data = pickle.load(open(dir_path.joinpath(file_name), 'rb'))
-    return data
+    # select_feature_and_prepare_data('flatmap')
+    # create_data_bunch_from_csv()
 
+    if 'multi' in args['objective']:
+        assert args['num_class'] > 2, 'multiclass objective should have class num > 2.'
+    assert args['params_file_name'] != '', 'please name the best params file.'
 
-def timer(func):
-    def func_wrapper(*args, **kwargs):
-        time_start = time()
-        result = func(*args, **kwargs)
-        time_end = time()
-        time_spend = time_end - time_start
-        print(f'{func.__name__} cost time {time_spend // 60} minutes.')
-        return result
-    return func_wrapper
+    if args['metric'] is None:
+        assert args['feval'] is not None and args['eval_key'] is not None, \
+            "custom metric should be assigned when metric is None."
 
-
-class LightGBMEntrance(object):
-    def __init__(self, params_dict=None):
-
-        if params_dict is None:
-            params_dict = default_params_dict
-        self.dataset = params_dict['dataset']
-        self.version = params_dict['version']
-        self.objective = params_dict['objective']
-        self.metric = params_dict['metric']
-        self.num_class = params_dict['num_class']
-        self.optimizer = params_dict['optimizer']
-        self.save_experiment = params_dict['save_experiment']
-        self.train_path = params_dict['train_path']
-        self.test_path = params_dict['test_path']
-        self.result_path = params_dict['result_path']
-        self.train_file_name = params_dict['train_file_name']
-        self.test_file_name = params_dict['test_file_name']
-        self.out_model_name = params_dict['out_model_name']
-        self.magic_seed = params_dict['magic_seed']
-        self.load_best_params = params_dict['load_best_params']
-        self.params_file_name = params_dict['params_file_name']
-        self.n_folds = params_dict['n_folds']
-        self.fobj = params_dict['fobj']
-        self.feval = params_dict['feval']
-        self.eval_key = params_dict['eval_key']
-        self.hyperopt_max_evals = params_dict['hyperopt_max_evals']
-        self.optuna_n_trials = params_dict['optuna_n_trials']
-        self.optuna_direction = params_dict['optuna_direction']
-
-        self.model = None
-        self.best_params = None
-
-        if self.objective == 'multiclass':
-            assert self.num_class > 2, 'multiclass objective should have class num > 2.'
-        assert self.params_file_name != '', 'please name the best params file.'
-
-        if self.metric is None:
-            assert self.feval is not None and self.eval_key is not None, \
-                "custom metric should be assigned when metric is None."
-
-
-    def __str__(self):
-        return '\n'.join(f'{item[0]}: {item[1]}' for item in self.__dict__.items())
-
-    @timer
-    def train(self):
+    if args['target'] == 'train':
         print("--------- begin load train and predict data ---------")
-        train_data = load_data(self.train_path, self.train_file_name)
+        train_data = load_data(args['train_path'], args['train_file_name'])
         print(f"columns : {train_data.col_names}")
         print(f"category columns : {train_data.category_cols}")
         X = train_data.data
@@ -121,7 +82,7 @@ class LightGBMEntrance(object):
         print(f"X train shape : {X.shape}")
         print(f"y train shape : {y.shape}")
 
-        test_data = load_data(self.test_path, self.test_file_name)
+        test_data = load_data(args['test_path'], args['test_file_name'])
         X_predict = test_data.data
         id_predict = test_data.id
         print(f"X predict shape : {X_predict.shape}")
@@ -129,52 +90,51 @@ class LightGBMEntrance(object):
         print("--------- done load train and predict data ---------")
 
         # X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.25, shuffle=True, random_state=1, stratify=y)
+        start_time = time()
 
-        self.model = LightGBM(
-            dataset = self.dataset,
-            train_set = [X, y],
-            predict_set = [X_predict, id_predict],
-            col_names = train_data.col_names,
-            category_cols = train_data.category_cols,
-            objective = self.objective,
-            metric = self.metric,
-            num_class = self.num_class,
-            optimizer = self.optimizer,
-            magic_seed = self.magic_seed,
-            out_dir = self.result_path,
-            out_model_name = self.out_model_name,
-            save = self.save_experiment,
-            version = self.version,
-            n_folds = self.n_folds,
-            fobj = self.fobj,
-            feval = self.feval,
-            eval_key = self.eval_key,
-            hyperopt_max_evals = self.hyperopt_max_evals,
-            optuna_n_trials = self.optuna_n_trials,
-            optuna_direction = self.optuna_direction
+        model = LightGBM(
+            dataset=args['dataset'],
+            train_set=[X, y],
+            predict_set=[X_predict, id_predict],
+            col_names=train_data.col_names,
+            category_cols=train_data.category_cols,
+            objective=args['objective'],
+            metric=args['metric'],
+            num_class=args['num_class'],
+            optimizer=args['optimizer'],
+            magic_seed=args['magic_seed'],
+            out_dir=args['result_path'],
+            out_model_name=args['out_model_name'],
+            save=args['save_experiment'],
+            version=args['version'],
+            n_folds=args['n_folds'],
+            fobj=args['fobj'],
+            feval=args['feval'],
+            eval_key=args['eval_key'],
+            hyperopt_max_evals=args['hyperopt_max_evals'],
+            optuna_n_trials=args['optuna_n_trials'],
+            optuna_direction=args['optuna_direction']
         )
 
-        if self.load_best_params:
-            self.best_params = of_json(self.result_path.joinpath(self.params_file_name))
+        if args['load_best_params']:
+            best_params = of_json(args['result_path'].joinpath(args['params_file_name']))
         else:
-            self.best_params = self.model.optimize()
-            self.best_params['num_leaves'] = int(self.best_params['num_leaves'])
-            to_json(self.best_params, self.result_path.joinpath(self.params_file_name))
+            best_params = model.optimize()
+            best_params['num_leaves'] = int(best_params['num_leaves'])
+            to_json(best_params, args['result_path'].joinpath(args['params_file_name']))
 
         print("--------- best params ---------")
-        print(self.best_params)
+        print(best_params)
 
-        self.model.train_and_predict(self.best_params)
+        model.train_and_predict(best_params)
 
         # 打印特征重要性
         # assert args['out_model_name'] != '' and args['result_path'] != '', 'please give the model path.'
         # data_bunch = pickle.load(open(args['result_path'] / args['out_model_name'], 'rb'))
         # LightGBM.print_feature_importance(data_bunch)
 
-
-
-
-if __name__ == '__main__':
+        end_time = time()
+        print(f'run time all : {(end_time - start_time) // 60} minutes.')
 
 
     elif args['target'] == 'predict':
