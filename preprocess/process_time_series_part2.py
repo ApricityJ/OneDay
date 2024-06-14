@@ -80,7 +80,7 @@ def weekend_weekday_stats(df):
         'weekend_trans_count': weekend_trans_count,
         'weekend_trans_amount': weekend_trans_amount,
         'weekday_trans_count': weekday_trans_count,
-        'weekday_trans_amount': weekday_trans_amount,
+        'weekday_trans_amqount': weekday_trans_amount,
         'weekend_count_ratio': weekend_count_ratio,
         'weekend_amount_ratio': weekend_amount_ratio,
         'weekday_count_ratio': weekday_count_ratio,
