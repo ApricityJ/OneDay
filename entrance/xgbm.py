@@ -10,7 +10,6 @@ import xgboost as xgb
 from util.jsons import of_json, to_json
 from model.XGBoost import XGBoost
 from constant import *
-from preprocess.feature_select import select_feature_and_prepare_data, create_data_bunch_from_csv
 
 warnings.filterwarnings("ignore")
 
@@ -18,12 +17,12 @@ warnings.filterwarnings("ignore")
 if __name__ == '__main__':
 
     args = {
-        'dataset': 'anti_fraud',  # penguins
+        'dataset': 'oneday',  # penguins
         'version': '1',
         'objective': 'binary:logistic',  # binary:logistic, multi:softmax, multi:softprob...
         'eval_metric': None,  # ['logloss', 'auc'], ['mlogloss']
         'num_class': 2,
-        'target': 'train',  # train, predict, feature_importance
+        'target': 'predict',  # train, predict, feature_importance
         'optimizer': 'hyperopt',  # hyperopt, optuna...
         'save_experiment': True,
         # 'data_path': Path("../data"),
@@ -36,14 +35,15 @@ if __name__ == '__main__':
         'magic_seed': active_random_state,
         'load_best_params': False,
         'params_file_name': 'best_params_xgb.dict',
+
+        'hyperopt_max_evals': 5,  # 30
+        'optuna_n_trials': 5,  # 20
+        'optuna_direction': 'maximize'
     }
     print("-----------------------------")
     print(f"args : {args}")
 
     start_time = time.time()
-
-    # select_feature_and_prepare_data('flatmap')
-    # create_data_bunch_from_csv()
 
     if 'multi' in args['objective']:
         assert args['num_class'] > 2, 'multiclass objective should have class num > 2.'
@@ -83,7 +83,11 @@ if __name__ == '__main__':
             out_dir=args['result_path'],
             out_model_name=args['out_model_name'],
             save=args['save_experiment'],
-            version=args['version'])
+            version=args['version'],
+            hyperopt_max_evals=args['hyperopt_max_evals'],
+            optuna_n_trials=args['optuna_n_trials'],
+            optuna_direction=args['optuna_direction']
+        )
 
         if args['load_best_params']:
             best_params = of_json(args['result_path'].joinpath(args['params_file_name']))
@@ -109,7 +113,7 @@ if __name__ == '__main__':
         assert args['out_model_name'] != '' and args['result_path'] != '', 'please give the model path.'
 
         print("--------- begin load predict data ---------")
-        data_bunch = pickle.load(open(args['data_path'] / args['test_file_name'], 'rb'))
+        data_bunch = pickle.load(open(args['test_path'] / args['test_file_name'], 'rb'))
         X_predict = data_bunch.data
         id_predict = data_bunch.id
         print(f"X predict shape : {X_predict.shape}")
@@ -137,9 +141,9 @@ if __name__ == '__main__':
         assert args['out_model_name'] != '' and args['result_path'] != '', 'please give the model path.'
 
         data_bunch = pickle.load(open(args['result_path'] / args['out_model_name'], 'rb'))
-        XGBoost.print_feature_importance(data_bunch)
+        # XGBoost.print_feature_importance(data_bunch)
 
-        train_data_bunch = pickle.load(open(args['data_path'] / args['train_file_name'], 'rb'))
+        train_data_bunch = pickle.load(open(args['train_path'] / args['train_file_name'], 'rb'))
         X = train_data_bunch.data
         XGBoost.shap_feature_importance(data_bunch, X)
     else:

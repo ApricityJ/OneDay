@@ -1,6 +1,8 @@
+import numpy as np
 import optuna
 import lightgbm as lgb
 import xgboost as xgb
+import catboost as cb
 import plotly
 from optuna.integration import LightGBMPruningCallback
 from optuna.visualization import plot_param_importances
@@ -28,12 +30,17 @@ class Optuna(object):
                                         direction=self.direction,
                                         study_name="xgboost_search")
             study.optimize(self.xgb_objective, n_trials=self.n_trials)
+        elif self.model_type == "catboost":
+            study = optuna.create_study(sampler=optuna.samplers.TPESampler(seed=self.model.magic_seed),
+                                        direction=self.direction,
+                                        study_name="catboost_search")
+            study.optimize(self.catm_objective, n_trials=self.n_trials)
         else:
             study = None
             pass
 
         best = study.best_params
-        # print(self.early_stop_list)
+        print(self.early_stop_list)
         best['num_boost_round'] = self.early_stop_list[study.best_trial.number]
         graph_importance = plot_param_importances(study)
         plotly.offline.plot(graph_importance)
@@ -55,6 +62,7 @@ class Optuna(object):
                   "feature_fraction": trial.suggest_float("feature_fraction", 0.2, 0.95, step=0.1),
                   'objective': self.model.objective,
                   'metric': self.model.metric,
+                  # 'boosting': self.model.boosting,
                   'verbose': -1,
                   'seed': self.model.magic_seed,
                   'bagging_seed': self.model.magic_seed,
@@ -117,5 +125,42 @@ class Optuna(object):
         # print(f'cv_result: {cv_result}')
         cv_score = round(cv_result[self.model.eval_key].iloc[-1], 4)
         self.early_stop_list.append(len(cv_result[self.model.eval_key]))
+
+        return cv_score
+
+    def catm_objective(self, trial):
+
+        params = {'num_boost_round': trial.suggest_int('num_boost_round', 100, 1000, 50),
+                  'depth': trial.suggest_int('depth', 4, 14, 1),
+                  'border_count': trial.suggest_int('border_count', 32, 255, 1),
+                  'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3),
+                  'l2_leaf_reg': trial.suggest_float('l2_leaf_reg', 1, 10),
+                  "bagging_temperature": trial.suggest_float("bagging_temperature", 0.1, 1.),
+                  "random_strength": trial.suggest_float("random_strength", 0.1, 10.),
+                  'objective': self.model.objective,
+                  'eval_metric': self.model.eval_metric,
+                  'random_seed': self.model.magic_seed
+                  }
+
+        if 'multi' in self.model.objective:
+            params['num_class'] = self.model.num_class
+
+        params['num_boost_round'] = int(params['num_boost_round'])
+        cv_result = cb.cv(
+            params=params,
+            pool=self.model.cb_train,
+            fold_count=5,
+            shuffle=True,
+            partition_random_seed=0,
+            plot=False,
+            stratified=True,
+            verbose=False,
+            num_boost_round=params['num_boost_round'],
+            early_stopping_rounds=30,
+            seed=self.model.magic_seed)
+
+        # print(f'cv_result: {cv_result}')
+        cv_score = np.max(cv_result[self.model.eval_key])
+        self.early_stop_list.append(np.argmax(cv_result[self.model.eval_key]) + 1)
 
         return cv_score

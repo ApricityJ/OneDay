@@ -23,7 +23,7 @@ from util.optuna import Optuna
 from util.jsons import to_json
 
 warnings.filterwarnings("ignore")
-plt.rcParams['font.sans-serif']=['SimHei']  # 用来正常显示中文标签
+# plt.rcParams['font.sans-serif']=['SimHei']  # 用来正常显示中文标签
 plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
 pd.set_option('display.max_rows', None)
 
@@ -37,6 +37,7 @@ class LightGBM(object):
                        objective: str,
                        metric: str | None,
                        num_class: int = 2,
+                       boosting: str = 'gbdt',
                        optimizer: str = 'hyperopt',
                        magic_seed: int = 29,
                        out_dir: Path = Path('result'),
@@ -68,6 +69,7 @@ class LightGBM(object):
 
         self.objective = objective
         self.num_class = num_class
+        self.boosting = boosting
         self.optimizer = optimizer
         self.magic_seed = magic_seed
 
@@ -78,8 +80,11 @@ class LightGBM(object):
 
         self.n_folds = n_folds
         self.fobj = fobj
-        self.feval = getattr(metrics, feval)
-        self.feval_custom = getattr(metrics, feval + '_custom')
+        self.feval = None
+        self.feval_custom = None
+        if feval is not None:
+            self.feval = getattr(metrics, feval)
+            self.feval_custom = getattr(metrics, feval + '_custom')
         self.eval_key = eval_key
         self.metric = metric
 
@@ -105,6 +110,7 @@ class LightGBM(object):
         params['objective'] = self.objective
         params['num_class'] = self.num_class
         params['metric'] = self.metric
+        params['boosting'] = self.boosting
         params['verbose'] = -1
 
         if self.objective == 'multiclass':
@@ -115,6 +121,7 @@ class LightGBM(object):
             prediction_folds_mean = np.zeros(len(self.X_predict))
 
         score_folds = []
+        threshold_folds = []
         kf = StratifiedKFold(n_splits=self.n_folds, random_state=self.magic_seed, shuffle=True)
         for index, (train_index, eval_index) in enumerate(kf.split(self.X_tr, self.y_tr)):
             print(f"FOLD : {index}")
@@ -143,22 +150,43 @@ class LightGBM(object):
                 for item_index, item in zip(eval_index, eval_prediction):
                     eval_prediction_folds[int(item_index)] = list(item)
             else:
-                eval_df = pd.DataFrame({'id': eval_index, 'predicts': eval_prediction})
+                eval_df = pd.DataFrame({'id': eval_index,
+                                        'predicts': eval_prediction, 'label': self.y_tr.loc[eval_index]})
                 if index == 0:
                     eval_prediction_folds = eval_df.copy()
                 else:
                     eval_prediction_folds = eval_prediction_folds.append(eval_df)
 
-            score, threshold = self.feval_custom(eval_prediction, self.y_tr.loc[eval_index])
-            score_folds.append(score)
-            print(f"FOLD SCORE = {score}")
-
+            # score, threshold = self.feval_custom(eval_prediction, self.y_tr.loc[eval_index])
+            if self.metric == 'auc':
+                score = metrics.auc_score(self.y_tr.loc[eval_index], eval_prediction)
+                score_folds.append(score)
+                print(f"FOLD SCORE = {score}")
+            elif self.metric is None:
+                score, threshold = self.feval_custom(eval_prediction, self.y_tr.loc[eval_index])
+                threshold_folds.append(threshold)
+                score_folds.append(score)
+                print(f"FOLD SCORE = {score}, FOLD THRESHOLD = {threshold}")
+            else:
+                pass
 
         print(f'score all : {score_folds}')
         print(f'score mean : {sum(score_folds) / self.n_folds}')
-        self._validate_and_predict(eval_prediction_folds, prediction_folds_mean, params)
-        print("--------- done training and predicting ---------")
 
+        # self._validate_and_predict(eval_prediction_folds, prediction_folds_mean, params)
+
+        eval_predictions = eval_prediction_folds.sort_values(by=['id'])
+        eval_predictions.to_csv(self.out_dir / '{}_lgbm_model_{}_train.csv'.format(self.dataset, self.version),
+                                index=False)
+
+        # 这里只是提交了概率
+        pd.DataFrame({'id': self.id_predict, 'predicts': prediction_folds_mean}) \
+            .to_csv(self.out_dir / '{}_lgbm_model_{}_submission.csv'.format(self.dataset, self.version), index=False)
+
+        if self.save:
+            self._save(params)
+
+        print("--------- done training and predicting ---------")
 
     def _validate_and_predict(self, eval_prediction_folds, prediction_folds_mean, params):
         if self.objective == 'multiclass':
@@ -169,8 +197,7 @@ class LightGBM(object):
         if self.save:
             self._save(params)
 
-
-    def _validate_and_predict_binary(self, eval_prediction_folds, prediction_folds_mean):
+    def _validate_and_predict_binary_f2(self, eval_prediction_folds, prediction_folds_mean):
 
         eval_predictions = eval_prediction_folds.sort_values(by=['id'])
         best_f2, best_threshold = self.feval_custom(eval_predictions['predicts'].values, self.y_tr)
@@ -227,7 +254,6 @@ class LightGBM(object):
         submission.to_csv(self.out_dir / '{}_lgbm_model_{}_submission.csv'.format(self.dataset, self.version),
                           index=False)
 
-
     def _save(self, params):
         params['verbose'] = -1
         print('train and save model with all data.')
@@ -250,6 +276,19 @@ class LightGBM(object):
 
     @staticmethod
     def shap_feature_importance(data_bunch, X):
-        shap_values = shap.TreeExplainer(data_bunch.model).shap_values(X)
-        shap.summary_plot(shap_values, X)
-        shap.summary_plot(shap_values[1], X)
+        # 创建SHAP解释器并计算SHAP值
+        explainer = shap.TreeExplainer(data_bunch.model)
+        shap_values = explainer.shap_values(X)
+        print(np.array(shap_values).shape)  # (2, 37050, 190)
+
+        # shap.summary_plot(shap_values, X, show=False, max_display=20)
+        # plt.savefig("../picture/shap_summary_plot1.png")
+
+        # shap.summary_plot(shap_values[1], X, show=False, max_display=10)
+        # plt.savefig("../picture/shap_summary_plot2.png")
+
+        # shap.dependence_plot("YAVER_DPSA_BAL", shap_values[1], X, interaction_index=None, show=False)
+        # plt.savefig("../picture/shap_dependence_plot.png")
+
+        # shap.force_plot(explainer.expected_value[1], shap_values[1][0], X.iloc[0, :], matplotlib=True)
+        plt.close()

@@ -1,6 +1,6 @@
 import numpy as np
 
-from sklearn.metrics import f1_score, precision_recall_curve
+from sklearn.metrics import f1_score, precision_recall_curve, roc_auc_score, roc_curve
 from scipy.misc import derivative
 
 
@@ -10,6 +10,22 @@ from scipy.misc import derivative
 # def softmax(x):
 #     exp_x = np.exp(x - np.max(x))
 #     return exp_x / (np.sum(exp_x, axis=1, keepdims=True) + 1e-6)
+
+def auc_score(y_true, y_pred):
+    return roc_auc_score(y_true, y_pred)
+
+
+def lgb_ks_score_eval(y_pred, data):
+    fpr, tpr, thresholds = roc_curve(data.get_label(), y_pred)
+    return 'ks', max(tpr - fpr), True
+
+
+def lgb_ks_score_eval_custom(y_pred, y_true):
+    fpr, tpr, thresholds = roc_curve(y_true, y_pred)
+    ks_value = max(tpr - fpr)
+    idx = np.argwhere(tpr - fpr == ks_value)[0, 0]
+    ks_thresholds = thresholds[idx]
+    return ks_value, ks_thresholds
 
 
 def best_threshold(y_true, pred_proba, proba_range, verbose=False):
@@ -222,6 +238,19 @@ def lgb_f1_score_multi_weighted_eval_custom(y_pred, y_true):
     return f1_score(y_true, predictions, average='weighted')
 
 
+def xgb_ks_score_eval(y_pred, data):
+    fpr, tpr, thresholds = roc_curve(data.get_label(), y_pred)
+    return 'ks', max(tpr - fpr)
+
+
+def xgb_ks_score_eval_custom(y_pred, y_true):
+    fpr, tpr, thresholds = roc_curve(y_true, y_pred)
+    ks_value = max(tpr - fpr)
+    idx = np.argwhere(tpr - fpr == ks_value)[0, 0]
+    ks_thresholds = thresholds[idx]
+    return ks_value, ks_thresholds
+
+
 def xgb_f1_score_eval(y_pred, data):
     y_true = data.get_label()
     f1, threshold = get_best_f1_threshold(y_pred, y_true)
@@ -309,3 +338,46 @@ def focal_loss_xgb(y_pred, dtrain, alpha=0.25, gamma=2.0):
     hess = alpha * (1 - pt) ** gamma * (gamma * pt * (1 - pt) + pt * (1 - pt) * (y_true - prob))
 
     return grad, hess
+
+
+class CatKSEvalMetric(object):
+    def get_final_error(self, error, weight):
+        return error
+
+    def is_max_optimal(self):
+        return True
+
+    @staticmethod
+    def ks_metric(y_true, y_pred):
+        fpr, tpr, _ = roc_curve(y_true, y_pred)
+        ks_value = max(tpr - fpr)
+        return ks_value
+
+    def evaluate(self, approxes, target, weight):
+        # approxes is list of indexed containers
+        # (containers with only __len__ and __getitem__ defined), one container
+        # per approx dimension. Each container contains floats.
+        # weight is one dimensional indexed container.
+        # target is float.
+        # weight parameter can be None.
+        # Returns pair (error, weights sum)
+
+        assert len(approxes) == 1
+        assert len(target) == len(approxes[0])
+
+        approx = approxes[0]
+
+        weight_sum = 0.0
+
+        y_true = np.array(target).astype(int)
+        score = self.ks_metric(y_true, approx)
+
+        return score, weight_sum
+
+
+def CatKSEvalMetric_custom(y_pred, y_true):
+    fpr, tpr, thresholds = roc_curve(y_true, y_pred)
+    ks_value = max(tpr - fpr)
+    idx = np.argwhere(tpr - fpr == ks_value)[0, 0]
+    ks_thresholds = thresholds[idx]
+    return ks_value, ks_thresholds

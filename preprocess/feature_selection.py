@@ -1,19 +1,291 @@
+from pathlib import Path
+import pickle
+
 from boruta import BorutaPy
+from lightgbm import LGBMClassifier
 from sklearn.ensemble import RandomForestClassifier
-from constant import active_random_state
-from data import loader
+
+import numpy as np
+import pandas as pd
+from pandas import DataFrame
+import seaborn as sns
+import matplotlib.pyplot as plt
+from scipy import stats
+from sklearn.metrics import accuracy_score, f1_score, roc_auc_score
+from sklearn.model_selection import StratifiedKFold
+
+from data import loader, exporter
+from util import jsons
+from constant import *
+
+import warnings
+
+warnings.filterwarnings('ignore')
 
 
-def select_by_boruta():
-    train, _ = loader.to_df_train_test()
-
-    rf = RandomForestClassifier(n_jobs=-1, class_weight="balanced", max_depth=5)
-    boruta = BorutaPy(estimator=rf, n_estimators="auto", verbose=2, random_state=active_random_state)
-
-    boruta.fit(train[:-1], train['label'])
-
-    return boruta.transform(train)
+# 读取数据
+# data_bunch = pickle.load(open(Path(dir_train).joinpath(file_name_train), 'rb'))
+# X_train = data_bunch.data
+# data_bunch = pickle.load(open(Path(dir_test).joinpath(file_name_test), 'rb'))
+# X_test = data_bunch.data
 
 
-def select_by_wrapper():
+
+#
+# from boruta import BorutaPy
+# from sklearn.ensemble import RandomForestClassifier
+# from constant import active_random_state
+# from data import loader
+#
+#
+# def select_by_boruta():
+#     train, _ = loader.to_df_train_test()
+#
+#     rf = RandomForestClassifier(n_jobs=-1, class_weight="balanced", max_depth=5)
+#     boruta = BorutaPy(estimator=rf, n_estimators="auto", verbose=2, random_state=active_random_state)
+#
+#     boruta.fit(train[:-1], train['label'])
+#
+#     return boruta.transform(train)
+#
+#
+# def select_by_wrapper():
+#     pass
+
+
+def select_by_boruta(key: str):
+    df_data = load_dataframe_to_process(key)
+
+    df_target = loader.to_df_label()
+
+    df_data = df_data.merge(df_target, left_on=['CUST_NO'], right_on=['CUST_NO'], how='left')
+    label_col = df_data[LABEL]
+    df_data.drop([LABEL, 'SRC', 'CUST_NO'], axis=1, inplace=True)
+    print(f"column nums : {df_data.shape[1]}")
+
+    estimator = RandomForestClassifier(n_jobs=-1, class_weight="balanced", max_depth=5)
+    # estimator = LGBMClassifier(n_estimators=100, n_jobs=-1, verbose=0, num_boost_round=100)  # 有问题的
+    # estimator = LGBMClassifier(n_jobs=-1, max_depth=5, num_leaves=31)
+
+    # 寻找所有相关的特征
+    boruta = BorutaPy(estimator=estimator, n_estimators="auto", verbose=2, random_state=active_random_state)
+
+    boruta.fit(df_data.values, label_col.values)
+    selected = df_data.columns[boruta.support_]
+    print(f'select column nums : {len(selected)}')
+    selected = selected.tolist()
+    selected.insert(0, 'CUST_NO')
+    jsons.to_json(list(selected), Path(dir_result).joinpath(f'{key}_selected_cols.json'))
+
+
+def select_by_boruta_result(key: str):
     pass
+
+
+
+
+def unique_values_check(df):
+    """
+    检查 DataFrame 中的每一列，如果某列只包含唯一值，则将该列的名称加入列表中。
+
+    :param df: 要检查的 DataFrame
+    :return: 只包含唯一值的列的名称列表
+    """
+    columns_with_unique_values = []
+
+    # 遍历每一列并检查是否只包含唯一值
+    for column in df.columns:
+        if df[column].nunique() == 1:
+            columns_with_unique_values.append(column)
+
+    print(f'unique check - columns to delete = {len(columns_with_unique_values)}')
+    print(columns_with_unique_values)
+    print('-----------------------------')
+
+    return columns_with_unique_values
+
+
+def high_null_percentage_check(df, threshold):
+    """
+    检查 DataFrame 中的每一列，如果某列的空值数占总数的百分比超过了阈值，则将该列的名称加入列表中。
+
+    :param df: 要检查的 DataFrame
+    :param threshold: 空值百分比的阈值
+    :return: 超过阈值的列的名称列表
+    """
+    columns_with_high_null = []
+
+    # 遍历每一列并计算空值百分比
+    for column in df.columns:
+        null_percentage = df[column].isnull().sum() / len(df)
+        if null_percentage > threshold:
+            columns_with_high_null.append(column)
+
+    print(f'null check - threshold = {threshold} - columns to delete = {len(columns_with_high_null)}')
+    print(columns_with_high_null)
+    print('-----------------------------')
+
+    return columns_with_high_null
+
+
+def correlation_check(df, threshold):
+    corr_matrix = df.corr().abs()
+    upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(np.bool))
+
+    to_drop = []
+    for column in upper.columns:
+        if any(upper[column] > threshold):
+            print(f'{column}: {upper[upper[column] > threshold].index.values}')
+            to_drop.append(column)
+
+    print(f'correlation check - threshold = {threshold}, columns to delete = {len(to_drop)}')
+    print(to_drop)
+    print('-----------------------------')
+    return to_drop
+
+
+def distribution_check(df_train, df_test, columns, threshold):
+    to_drop = []
+    for col in columns:
+        result = stats.ks_2samp(df_train[col], df_test[col])
+        if result.pvalue < threshold:
+            to_drop.append(col)
+
+    print(f'distribution check - threshold = {threshold}, columns to delete = {len(to_drop)}')
+    print(to_drop)
+    print('-----------------------------')
+    return to_drop
+
+
+# 这里load的文件是包含 'SRC' 'ID', 但没有 'LABEL' 的
+def load_dataframe_to_process(key: str):
+    df_data = loader.to_df(Path(dir_preprocess).joinpath(f'{key}.csv'))
+    return df_data[df_data['SRC'] == 'train'], df_data[df_data['SRC'] == 'test']
+
+
+# 删除扰动项，主要有日期和object类型
+def drop_distractions(df_train: DataFrame, df_test: DataFrame):
+    idx_to_drop = []
+    for idx, type in df_train.dtypes.items():
+        if type == 'object':
+            idx_to_drop.append(idx)
+
+    print(f'drop columns -> {idx_to_drop}')
+    df_train.drop(idx_to_drop, axis=1, inplace=True)
+    df_test.drop(idx_to_drop, axis=1, inplace=True)
+
+    return df_train, df_test
+
+
+def adv_val(X_adv: DataFrame, y_adv: DataFrame):
+    # accs = []
+    # f1s = []
+    aucs = []
+    model = LGBMClassifier()
+
+    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=active_random_state)
+    for train_index, test_index in skf.split(X_adv, y_adv):
+
+        X_adv_train, X_adv_test = X_adv.iloc[train_index], X_adv.iloc[test_index]
+        y_adv_train, y_adv_test = y_adv.iloc[train_index], y_adv.iloc[test_index]
+
+        # 训练模型
+        model.fit(X_adv_train, y_adv_train)
+
+        # 预测
+        y_adv_pred = model.predict(X_adv_test)
+
+        # acc = accuracy_score(y_adv_test, y_adv_pred)
+        # f1 = f1_score(y_adv_test, y_adv_pred)
+        auc = roc_auc_score(y_adv_test, y_adv_pred)
+        # accs.append(acc)
+        # f1s.append(f1)
+        aucs.append(auc)
+
+    # 输出平均准确率
+    # print(accs)
+    # print(f1s)
+    print(aucs)
+    # avg_acc = np.mean(accs)
+    # avg_f1 = np.mean(f1s)
+    avg_auc = np.mean(aucs)
+    print(f'average auc: {avg_auc:.2f}')  # 小于0.7
+    # lgb.plot_importance(model)
+    # plt.show()
+    # plt.savefig()
+    feature_importance = pd.DataFrame({
+        'column': X_adv.columns,
+        'importance': model.feature_importances_,
+    }).sort_values(by='importance', ascending=False)
+    print(feature_importance[:50])
+    return feature_importance
+
+
+def adv_val_select(key: str):
+    df_train, df_test = load_dataframe_to_process(key)
+    drop_cols = jsons.of_json(Path(dir_result).joinpath(f'{key}_base_to_drop.json'))
+    df_train.drop(['SRC', ID], axis=1, inplace=True)  # 如果里面有日期也要记得删除
+    df_test.drop(['SRC', ID], axis=1, inplace=True)
+    df_train.drop(drop_cols, axis=1, inplace=True)
+    df_test.drop(drop_cols, axis=1, inplace=True)
+    print(f"train column nums : {df_train.shape}")
+    print(f"test column nums : {df_test.shape}")
+
+    df_train, df_test = drop_distractions(df_train, df_test)
+
+    # 创建标签
+    y_adv_train = [0] * len(df_train)
+    y_adv_test = [1] * len(df_test)
+
+    # 特征和标签
+    X_adv = pd.concat([pd.DataFrame(df_train), pd.DataFrame(df_test)], axis=0)
+    y_adv = pd.concat([pd.Series(y_adv_train), pd.Series(y_adv_test)], axis=0)
+
+    # 对抗验证
+    feature_importance = adv_val(X_adv, y_adv)
+
+    # feature_importance_drop = feature_importance[feature_importance['importance'] >= 10]
+    # feature_importance_drop = feature_importance_drop['column']
+    #
+    # X_train.drop(columns=feature_importance_drop, inplace=True)
+    # X_test.drop(columns=feature_importance_drop, inplace=True)
+    #
+    # X_adv = pd.concat([pd.DataFrame(X_train), pd.DataFrame(X_test)], axis=0)
+    # y_adv = pd.concat([pd.Series(y_adv_train), pd.Series(y_adv_test)], axis=0)
+    # feature_importance = adv_val(X_adv, y_adv)
+
+
+def base_select(key: str):
+    df_train, df_test = load_dataframe_to_process(key)
+    df_train.drop(['SRC', ID], axis=1, inplace=True)
+    df_test.drop(['SRC', ID], axis=1, inplace=True)
+    print(f"train column nums : {df_train.shape[1]}")
+    print(f"test column nums : {df_test.shape[1]}")
+
+    columns_to_drop = []
+    columns_with_unique_values = unique_values_check(df_train)
+    columns_to_drop.extend(columns_with_unique_values)
+    columns_with_high_null = high_null_percentage_check(df_train, 0.8)
+    columns_to_drop.extend(columns_with_high_null)
+    columns_with_high_correlation = correlation_check(df_train, 0.95)
+    columns_to_drop.extend(columns_with_high_correlation)
+    columns_to_check_distribution = list(set(df_train.columns.tolist()) - set(columns_to_drop))
+    columns_with_diff_distribution = distribution_check(df_train, df_test, columns_to_check_distribution,0.05)
+    columns_to_drop.extend(columns_with_diff_distribution)
+
+    print(f"after column nums : {df_train.shape[1] - len(columns_to_drop)}")
+    return columns_to_drop
+
+
+# 基础特征筛选
+key_1 = 'flatmap'
+columns_to_drop_base = base_select(key_1)
+jsons.to_json(columns_to_drop_base, Path(dir_result).joinpath(f'{key_1}_base_to_drop.json'))
+print('-----------------------------')
+
+# 对抗验证
+adv_val_select(key_1)
+print('-----------------------------')
+
+# todo: Boruta筛选
+# todo: lgb筛选

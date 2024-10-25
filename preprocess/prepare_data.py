@@ -27,6 +27,8 @@ from constant import *
 # print(df_test.shape)
 
 drop_cols = jsons.of_json(Path(dir_result).joinpath(f'flatmap_base_to_drop.json'))
+# drop_cols.append('NTRL_CUST_SEX_CD')
+# drop_cols.append('NTRL_RANK_CD')
 df = loader.to_df(Path(dir_preprocess).joinpath(f'flatmap.csv'))
 df.drop(drop_cols, axis=1, inplace=True)
 df_target = loader.to_df_label()
