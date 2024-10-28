@@ -26,7 +26,7 @@ def load_data(dir_path: Path, file_name: str) -> Bunch:
 
 if __name__ == '__main__':
     args = {
-        'dataset': 'oneday',
+        'dataset': 'xw_ent',
         'version': '1',
         'objective': 'binary',  # binary, multiclass...
         'metric': None,  # None需在模型中指定，'auc'
@@ -41,10 +41,10 @@ if __name__ == '__main__':
         'test_file_name': file_name_test,
         'out_model_name': 'result_model_lgbm.p',
         'magic_seed': active_random_state,
-        'load_best_params': True,
+        'load_best_params': False,
         'params_file_name': 'best_params_lgbm.dict',
         'n_folds': 5,
-        'target': 'feature_importance',
+        'target': 'train',
 
         # 'fobj': lambda x, y: focal_loss_lgb(x, y, alpha=0.25, gamma=2.0),  # 默认None
         'fobj': None,
@@ -55,8 +55,8 @@ if __name__ == '__main__':
         # 'feval': None,  # 默认None
         # 'eval_key': "auc-mean",  # 用于优化器
 
-        'hyperopt_max_evals': 5,  # 30
-        'optuna_n_trials': 5,  # 20
+        'hyperopt_max_evals': 30,  # 30
+        'optuna_n_trials': 20,  # 20
         'optuna_direction': 'maximize'
     }
     print("-----------------------------")

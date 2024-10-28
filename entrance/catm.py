@@ -25,11 +25,11 @@ def load_data(dir_path: Path, file_name: str) -> Bunch:
 
 if __name__ == '__main__':
     args = {
-        'dataset': 'oneday',
+        'dataset': 'xw_ent',
         'version': '1',
         'objective': 'Logloss',  # CrossEntropy...
         'num_class': 1,
-        'optimizer': 'optuna',  # hyperopt, optuna...
+        'optimizer': 'hyperopt',  # hyperopt, optuna...
         'save_experiment': True,
         'train_path': Path(dir_train),
         'test_path': Path(dir_test),
@@ -38,7 +38,7 @@ if __name__ == '__main__':
         'test_file_name': file_name_test,
         'out_model_name': 'result_model_catm.p',
         'magic_seed': active_random_state,
-        'load_best_params': True,
+        'load_best_params': False,
         'params_file_name': 'best_params_catm.dict',
         'n_folds': 5,
         'target': 'train',
@@ -48,8 +48,8 @@ if __name__ == '__main__':
         'eval_metric': 'CatKSEvalMetric',  # 'AUC'
         'eval_key': "test-CatKSEvalMetric-mean",  # 用于优化器  "test-AUC-mean"
 
-        'hyperopt_max_evals': 5,  # 30
-        'optuna_n_trials': 5,  # 20
+        'hyperopt_max_evals': 30,  # 30
+        'optuna_n_trials': 20,  # 20
         'optuna_direction': 'maximize'
     }
     print("-----------------------------")

@@ -17,12 +17,12 @@ warnings.filterwarnings("ignore")
 if __name__ == '__main__':
 
     args = {
-        'dataset': 'oneday',  # penguins
+        'dataset': 'xw_ent',  # penguins
         'version': '1',
         'objective': 'binary:logistic',  # binary:logistic, multi:softmax, multi:softprob...
         'eval_metric': None,  # ['logloss', 'auc'], ['mlogloss']
         'num_class': 2,
-        'target': 'predict',  # train, predict, feature_importance
+        'target': 'train',  # train, predict, feature_importance
         'optimizer': 'hyperopt',  # hyperopt, optuna...
         'save_experiment': True,
         # 'data_path': Path("../data"),
@@ -36,8 +36,8 @@ if __name__ == '__main__':
         'load_best_params': False,
         'params_file_name': 'best_params_xgb.dict',
 
-        'hyperopt_max_evals': 5,  # 30
-        'optuna_n_trials': 5,  # 20
+        'hyperopt_max_evals': 30,  # 30
+        'optuna_n_trials': 20,  # 20
         'optuna_direction': 'maximize'
     }
     print("-----------------------------")
