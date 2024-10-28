@@ -85,8 +85,8 @@ def to_ds_train_test():
 # 否则返回 默认的train/test
 def to_df_train_test(key=None):
     if key:
-        df_train = to_df(Path(dir_train).joinpath(f'{key}.csv'))
-        df_test = to_df(Path(dir_test).joinpath(f'{key}.csv'))
+        df_train = to_df(Path(dir_train).joinpath(f'{key}_T.csv'))
+        df_test = to_df(Path(dir_test).joinpath(f'{key}_A.csv'))
     else:
         df_train = to_df(Path(dir_preprocess).joinpath('train.csv'))
         df_test = to_df(Path(dir_preprocess).joinpath('test.csv'))
