@@ -275,37 +275,48 @@ def base_select(key: str):
 
 # 基础特征筛选
 key_1 = 'flatmap'
-columns_to_drop_base = base_select(key_1)
-jsons.to_json(columns_to_drop_base, Path(dir_result).joinpath(f'{key_1}_base_to_drop.json'))
+# columns_to_drop_base = base_select(key_1)
+# jsons.to_json(columns_to_drop_base, Path(dir_result).joinpath(f'{key_1}_base_to_drop.json'))
 print('-----------------------------')
 
 # 对抗验证
-adv_val_select(key_1)
+# adv_val_select(key_1)
 print('-----------------------------')
 
 
 def boruta_select(key: str):
     # 读取数据和LABEL
-    df_data = load_dataframe_to_process(key)
+    df_train, df_test = load_dataframe_to_process(key)
     df_target = loader.to_df_label()
 
     # 拼接
-    df_data = df_data.merge(df_target, left_on=['CUST_NO'], right_on=['CUST_NO'], how='left')
+    df_data = df_train.merge(df_target, left_on=['CUST_NO'], right_on=['CUST_NO'], how='left')
     label_col = df_data[LABEL]
     df_data.drop([LABEL, 'SRC', 'CUST_NO'], axis=1, inplace=True)
+    # 要先处理好类别特征
+    df_data.drop(['NTRL_CUST_SEX_CD', 'NTRL_RANK_CD'], axis=1, inplace=True)
+    # df_data = df_data.iloc[:, :50]  # 仅用于测试
     print(f"column nums : {df_data.shape[1]}")
 
     # 划分训练集和测试集
     X_train, X_test, y_train, y_test = train_test_split(df_data, label_col, test_size=0.2,
                                                         random_state=active_random_state)
 
+    X_train.fillna(-999, inplace=True)
     # 使用LightGBM的分类模型作为Boruta的基础模型
-    lgb_estimator = LGBMClassifier(n_estimators=100, random_state=42, n_jobs=-1)
+    # estimator = LGBMClassifier(n_estimators=100, num_boost_round=100, random_state=42, n_jobs=-1)
+    estimator = RandomForestClassifier(n_jobs=-1, class_weight="balanced", max_depth=5)
+    # estimator = LGBMClassifier(n_estimators=100, n_jobs=-1, verbose=0, num_boost_round=100)  # 有问题的
+    # estimator = LGBMClassifier(n_jobs=-1, max_depth=5, num_leaves=31)
+
+    # 寻找所有相关的特征
+    # boruta = BorutaPy(estimator=estimator, n_estimators="auto", verbose=2, random_state=active_random_state)
 
     # 创建Boruta特征选择器
     boruta_selector = BorutaPy(
-        lgb_estimator,
+        estimator,
         n_estimators='auto',  # 自动确定最优树数量
+        verbose=2,
         random_state=active_random_state
     )
 
@@ -319,27 +330,28 @@ def boruta_select(key: str):
     print("Selected Features by Boruta:", selected_features)
 
     # 保存为文件
-    selected = selected_features.tolist()
+    selected = selected_features
     selected.insert(0, 'CUST_NO')
     jsons.to_json(list(selected), Path(dir_result).joinpath(f'{key}_selected_cols_by_boruta.json'))
 
 
-
 def lgb_select(key: str, num_runs: int, threshold: float):
     # 读取数据和LABEL
-    df_data = load_dataframe_to_process(key)
+    df_train, df_test = load_dataframe_to_process(key)
     df_target = loader.to_df_label()
 
     # 拼接
-    X = df_data.merge(df_target, left_on=['CUST_NO'], right_on=['CUST_NO'], how='left')
+    X = df_train.merge(df_target, left_on=['CUST_NO'], right_on=['CUST_NO'], how='left')
     y = X[LABEL]
     X.drop([LABEL, 'SRC', 'CUST_NO'], axis=1, inplace=True)
+    # 要先处理好类别特征
+    X.drop(['NTRL_CUST_SEX_CD', 'NTRL_RANK_CD'], axis=1, inplace=True)
     print(f"column nums : {X.shape[1]}")
 
     feature_importances = pd.DataFrame()
     feature_importances['feature'] = X.columns
 
-    for run in range(num_runs):
+    for random_state in random_states[:num_runs]:
         # 打乱特征顺序
         shuffled_features = np.random.permutation(X.columns)
         X_shuffled = X[shuffled_features]
@@ -349,7 +361,7 @@ def lgb_select(key: str, num_runs: int, threshold: float):
                                                               random_state=active_random_state)
 
         # 定义LightGBM模型
-        model = LGBMClassifier(random_state=active_random_state, n_estimators=1000, learning_rate=0.1)
+        model = LGBMClassifier(random_state=random_state, n_estimators=1000, learning_rate=0.1)
         model.fit(
             X_train, y_train,
             eval_set=[(X_valid, y_valid)],
@@ -358,7 +370,7 @@ def lgb_select(key: str, num_runs: int, threshold: float):
 
         # 获取特征重要性并保存
         fold_importance = model.feature_importances_
-        feature_importances[f'run_{run + 1}'] = fold_importance
+        feature_importances[f'run_{random_state}'] = fold_importance
 
     # 平均一下
     feature_importances['mean_importance'] = feature_importances.iloc[:, 1:].mean(axis=1)
@@ -366,11 +378,13 @@ def lgb_select(key: str, num_runs: int, threshold: float):
     selected_features = feature_importances[feature_importances['mean_importance'] > threshold ]['feature'].tolist()
 
     print("Selected Features nums :", len(selected_features))
-    print("Selected Features by Boruta:", selected_features)
+    print("Selected Features by lgb:", selected_features)
 
     # 保存为文件
-    selected = selected_features.tolist()
+    selected = selected_features
     selected.insert(0, 'CUST_NO')
     jsons.to_json(list(selected), Path(dir_result).joinpath(f'{key}_selected_cols_by_lgb.json'))
 
 
+# lgb_select('flatmap', 2,50)
+boruta_select('flatmap')
