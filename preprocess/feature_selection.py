@@ -324,7 +324,7 @@ def boruta_select(key: str):
     jsons.to_json(list(selected), Path(dir_result).joinpath(f'{key}_selected_cols_by_boruta.json'))
 
 
-# todo: lgb筛选
+
 def lgb_select(key: str, num_runs: int, threshold: float):
     # 读取数据和LABEL
     df_data = load_dataframe_to_process(key)
