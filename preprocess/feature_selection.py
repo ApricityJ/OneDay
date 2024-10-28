@@ -295,19 +295,28 @@ def boruta_select(key: str):
     df_data.drop([LABEL, 'SRC', 'CUST_NO'], axis=1, inplace=True)
     # 要先处理好类别特征
     df_data.drop(['NTRL_CUST_SEX_CD', 'NTRL_RANK_CD'], axis=1, inplace=True)
+    # df_data = df_data.iloc[:, :50]  # 仅用于测试
     print(f"column nums : {df_data.shape[1]}")
 
     # 划分训练集和测试集
     X_train, X_test, y_train, y_test = train_test_split(df_data, label_col, test_size=0.2,
                                                         random_state=active_random_state)
 
+    X_train.fillna(-999, inplace=True)
     # 使用LightGBM的分类模型作为Boruta的基础模型
-    lgb_estimator = LGBMClassifier(n_estimators=100, random_state=42, n_jobs=-1)
+    # estimator = LGBMClassifier(n_estimators=100, num_boost_round=100, random_state=42, n_jobs=-1)
+    estimator = RandomForestClassifier(n_jobs=-1, class_weight="balanced", max_depth=5)
+    # estimator = LGBMClassifier(n_estimators=100, n_jobs=-1, verbose=0, num_boost_round=100)  # 有问题的
+    # estimator = LGBMClassifier(n_jobs=-1, max_depth=5, num_leaves=31)
+
+    # 寻找所有相关的特征
+    # boruta = BorutaPy(estimator=estimator, n_estimators="auto", verbose=2, random_state=active_random_state)
 
     # 创建Boruta特征选择器
     boruta_selector = BorutaPy(
-        lgb_estimator,
+        estimator,
         n_estimators='auto',  # 自动确定最优树数量
+        verbose=2,
         random_state=active_random_state
     )
 
@@ -321,7 +330,7 @@ def boruta_select(key: str):
     print("Selected Features by Boruta:", selected_features)
 
     # 保存为文件
-    selected = selected_features.tolist()
+    selected = selected_features
     selected.insert(0, 'CUST_NO')
     jsons.to_json(list(selected), Path(dir_result).joinpath(f'{key}_selected_cols_by_boruta.json'))
 
