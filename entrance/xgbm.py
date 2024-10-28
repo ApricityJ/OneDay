@@ -69,6 +69,14 @@ if __name__ == '__main__':
         print("--------- done load train and predict data ---------")
 
         # X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.25, shuffle=True, random_state=1, stratify=y)
+        print("--------- begin test ---------")
+        if X.isnull().values.any():
+            print('some null values in X')
+        X.replace([np.inf, -np.inf], np.nan, inplace=True)
+        X.fillna(0, inplace=True)
+        if not X.isnull().values.any():
+            print('test again, no null values in X')
+        print("---------- end test ----------")
 
         xgboost = XGBoost(
             dataset=args['dataset'],
