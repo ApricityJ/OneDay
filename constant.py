@@ -16,7 +16,7 @@ dir_model = os.path.join(dir_contest, 'model')
 file_name_train = 'train.p'
 file_name_test = 'test.p'
 
-random_states = [0, 1, 42, 2023, 29]
+random_states = [42, 2024, 29]
 active_random_state = 29
 
 LABEL = 'FLAG'
