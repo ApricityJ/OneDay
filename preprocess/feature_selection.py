@@ -12,7 +12,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from scipy import stats
 from sklearn.metrics import accuracy_score, f1_score, roc_auc_score
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedKFold, train_test_split
 
 from data import loader, exporter
 from util import jsons
@@ -28,7 +28,6 @@ warnings.filterwarnings('ignore')
 # X_train = data_bunch.data
 # data_bunch = pickle.load(open(Path(dir_test).joinpath(file_name_test), 'rb'))
 # X_test = data_bunch.data
-
 
 
 #
@@ -80,8 +79,6 @@ def select_by_boruta(key: str):
 
 def select_by_boruta_result(key: str):
     pass
-
-
 
 
 def unique_values_check(df):
@@ -185,7 +182,6 @@ def adv_val(X_adv: DataFrame, y_adv: DataFrame):
 
     skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=active_random_state)
     for train_index, test_index in skf.split(X_adv, y_adv):
-
         X_adv_train, X_adv_test = X_adv.iloc[train_index], X_adv.iloc[test_index]
         y_adv_train, y_adv_test = y_adv.iloc[train_index], y_adv.iloc[test_index]
 
@@ -270,7 +266,7 @@ def base_select(key: str):
     columns_with_high_correlation = correlation_check(df_train, 0.95)
     columns_to_drop.extend(columns_with_high_correlation)
     columns_to_check_distribution = list(set(df_train.columns.tolist()) - set(columns_to_drop))
-    columns_with_diff_distribution = distribution_check(df_train, df_test, columns_to_check_distribution,0.05)
+    columns_with_diff_distribution = distribution_check(df_train, df_test, columns_to_check_distribution, 0.05)
     columns_to_drop.extend(columns_with_diff_distribution)
 
     print(f"after column nums : {df_train.shape[1] - len(columns_to_drop)}")
@@ -287,5 +283,94 @@ print('-----------------------------')
 adv_val_select(key_1)
 print('-----------------------------')
 
-# todo: Boruta筛选
+
+def boruta_select(key: str):
+    # 读取数据和LABEL
+    df_data = load_dataframe_to_process(key)
+    df_target = loader.to_df_label()
+
+    # 拼接
+    df_data = df_data.merge(df_target, left_on=['CUST_NO'], right_on=['CUST_NO'], how='left')
+    label_col = df_data[LABEL]
+    df_data.drop([LABEL, 'SRC', 'CUST_NO'], axis=1, inplace=True)
+    print(f"column nums : {df_data.shape[1]}")
+
+    # 划分训练集和测试集
+    X_train, X_test, y_train, y_test = train_test_split(df_data, label_col, test_size=0.2,
+                                                        random_state=active_random_state)
+
+    # 使用LightGBM的分类模型作为Boruta的基础模型
+    lgb_estimator = LGBMClassifier(n_estimators=100, random_state=42, n_jobs=-1)
+
+    # 创建Boruta特征选择器
+    boruta_selector = BorutaPy(
+        lgb_estimator,
+        n_estimators='auto',  # 自动确定最优树数量
+        random_state=active_random_state
+    )
+
+    # 特征选择
+    boruta_selector.fit(X_train.values, y_train.values)
+
+    # 被Boruta选中的特征
+    selected_features = X_train.columns[boruta_selector.support_].to_list()
+
+    print("Selected Features nums :", len(selected_features))
+    print("Selected Features by Boruta:", selected_features)
+
+    # 保存为文件
+    selected = selected_features.tolist()
+    selected.insert(0, 'CUST_NO')
+    jsons.to_json(list(selected), Path(dir_result).joinpath(f'{key}_selected_cols_by_boruta.json'))
+
+
 # todo: lgb筛选
+def lgb_select(key: str, num_runs: int, threshold: float):
+    # 读取数据和LABEL
+    df_data = load_dataframe_to_process(key)
+    df_target = loader.to_df_label()
+
+    # 拼接
+    X = df_data.merge(df_target, left_on=['CUST_NO'], right_on=['CUST_NO'], how='left')
+    y = X[LABEL]
+    X.drop([LABEL, 'SRC', 'CUST_NO'], axis=1, inplace=True)
+    print(f"column nums : {X.shape[1]}")
+
+    feature_importances = pd.DataFrame()
+    feature_importances['feature'] = X.columns
+
+    for run in range(num_runs):
+        # 打乱特征顺序
+        shuffled_features = np.random.permutation(X.columns)
+        X_shuffled = X[shuffled_features]
+
+        # 分割数据集
+        X_train, X_valid, y_train, y_valid = train_test_split(X_shuffled, y, test_size=0.2,
+                                                              random_state=active_random_state)
+
+        # 定义LightGBM模型
+        model = LGBMClassifier(random_state=active_random_state, n_estimators=1000, learning_rate=0.1)
+        model.fit(
+            X_train, y_train,
+            eval_set=[(X_valid, y_valid)],
+            eval_metric='auc'
+        )
+
+        # 获取特征重要性并保存
+        fold_importance = model.feature_importances_
+        feature_importances[f'run_{run + 1}'] = fold_importance
+
+    # 平均一下
+    feature_importances['mean_importance'] = feature_importances.iloc[:, 1:].mean(axis=1)
+
+    selected_features = feature_importances[feature_importances['mean_importance'] > threshold ]['feature'].tolist()
+
+    print("Selected Features nums :", len(selected_features))
+    print("Selected Features by Boruta:", selected_features)
+
+    # 保存为文件
+    selected = selected_features.tolist()
+    selected.insert(0, 'CUST_NO')
+    jsons.to_json(list(selected), Path(dir_result).joinpath(f'{key}_selected_cols_by_lgb.json'))
+
+
