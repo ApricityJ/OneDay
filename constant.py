@@ -1,7 +1,7 @@
 import os
 
 
-dir_base = '/Users/sophie/workspace/data/contest'
+dir_base = '/data/contest/'
 active_year = '2024'
 active_contest = '2'  # '1' 'dummy'
 active_phase = 'A'  # B  'test'
