@@ -27,11 +27,11 @@ def load_data(dir_path: Path, file_name: str) -> Bunch:
 if __name__ == '__main__':
     args = {
         'dataset': 'xw_ent',
-        'version': '1',
+        'version': '6',
         'objective': 'binary',  # binary, multiclass...
         'metric': None,  # None需在模型中指定，'auc'
         'num_class': 1,
-        'boosting': 'gbdt',  # 'dart' 'rf' 'gbdt'，只是用来训练并不用来寻参
+        'boosting': 'dart',  # 'dart' 'rf' 'gbdt'，只是用来训练并不用来寻参
         'optimizer': 'hyperopt',  # hyperopt, optuna...
         'save_experiment': True,
         'train_path': Path(dir_train),
@@ -41,17 +41,19 @@ if __name__ == '__main__':
         'test_file_name': file_name_test,
         'out_model_name': 'result_model_lgbm.p',
         'magic_seed': active_random_state,
-        'load_best_params': False,
+        'load_best_params': True,
         'params_file_name': 'best_params_lgbm.dict',
         'n_folds': 5,
-        'target': 'train',
+        'target': 'train',  # feature_importance
 
         # 'fobj': lambda x, y: focal_loss_lgb(x, y, alpha=0.25, gamma=2.0),  # 默认None
         'fobj': None,
         # lambda x, y: f1_score_multi_macro_eval(x, y, self.num_class)
         # self.eval_key = "f1-macro-mean"
         'feval': 'lgb_ks_score_eval',  # 默认None
+        # 'feval': None,  # 默认None
         'eval_key': "ks-mean",  # 用于优化器
+        # 'eval_key': "auc-mean",  # 用于优化器
         # 'feval': None,  # 默认None
         # 'eval_key': "auc-mean",  # 用于优化器
 
@@ -121,7 +123,13 @@ if __name__ == '__main__':
         )
 
         if args['load_best_params']:
-            best_params = of_json(args['result_path'].joinpath(args['params_file_name']))
+            # best_params = of_json(args['result_path'].joinpath(args['params_file_name']))
+            # best_params['max_depth'] = int(best_params['max_depth'])
+            # best_params['min_data_in_leaf'] = int(best_params['min_data_in_leaf'])
+            best_params ={'bagging_fraction': 0.5331105048163136, 'colsample_bytree': 0.5639795665870723,
+             'learning_rate': 0.021759131913826182, 'min_child_weight': 9.994020026647163,
+             'num_leaves': 216, 'reg_alpha': 3.6783359022242137, 'reg_lambda': 3.4141224630155502,
+             'subsample': 0.7941142785966878}
         else:
             best_params = model.optimize()
             best_params['num_leaves'] = int(best_params['num_leaves'])
@@ -172,10 +180,10 @@ if __name__ == '__main__':
         assert args['out_model_name'] != '' and args['result_path'] != '', 'please give the model path.'
 
         data_bunch = pickle.load(open(args['result_path'] / args['out_model_name'], 'rb'))
-        # LightGBM.print_feature_importance(data_bunch)
+        LightGBM.print_feature_importance(data_bunch)
 
-        train_data_bunch = pickle.load(open(args['train_path'] / args['train_file_name'], 'rb'))
-        X = train_data_bunch.data
-        LightGBM.shap_feature_importance(data_bunch, X)
+        # train_data_bunch = pickle.load(open(args['train_path'] / args['train_file_name'], 'rb'))
+        # X = train_data_bunch.data
+        # LightGBM.shap_feature_importance(data_bunch, X)
     else:
         pass

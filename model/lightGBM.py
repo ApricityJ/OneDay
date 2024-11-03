@@ -10,6 +10,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 import lightgbm as lgb
+from lightgbm import log_evaluation, early_stopping
 import matplotlib.pylab as plt
 from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import (fbeta_score, precision_score, recall_score, confusion_matrix, classification_report)
@@ -111,7 +112,13 @@ class LightGBM(object):
         params['num_class'] = self.num_class
         params['metric'] = self.metric
         params['boosting'] = self.boosting
+        # params['first_metric_only'] = True
         params['verbose'] = -1
+        params['n_estimators'] = 2000
+        # params['early_stopping_round'] = 10
+        callbacks = [log_evaluation(period=100), early_stopping(stopping_rounds=10)]
+        # callbacks = [log_evaluation(period=100)]
+
 
         if self.objective == 'multiclass':
             eval_prediction_folds = dict()
@@ -121,6 +128,7 @@ class LightGBM(object):
             prediction_folds_mean = np.zeros(len(self.X_predict))
 
         score_folds = []
+        score_folds_2 = []
         threshold_folds = []
         kf = StratifiedKFold(n_splits=self.n_folds, random_state=self.magic_seed, shuffle=True)
         for index, (train_index, eval_index) in enumerate(kf.split(self.X_tr, self.y_tr)):
@@ -137,14 +145,20 @@ class LightGBM(object):
 
             model = lgb.train(params,
                               train_part,
-                              fobj=self.fobj,
+                              # fobj=self.fobj,
                               feval=self.feval,
-                              valid_sets=[train_part, eval_part],
-                              valid_names=['train', 'valid'],
-                              verbose_eval=1)
+                              # valid_sets=[train_part, eval_part],
+                              valid_sets=[eval_part],
+                              # valid_names=['train', 'valid'],
+                              valid_names=['valid'],
+                              callbacks=callbacks)
 
-            prediction_folds_mean += (model.predict(self.X_predict) / self.n_folds)
-            eval_prediction = model.predict(self.X_tr.loc[eval_index])
+
+            print(model.best_iteration)
+            prediction_folds_mean += (model.predict(self.X_predict, num_iteration=model.best_iteration) / self.n_folds)
+            eval_prediction = model.predict(self.X_tr.loc[eval_index], num_iteration=model.best_iteration)
+            # prediction_folds_mean += (model.predict(self.X_predict) / self.n_folds)
+            # eval_prediction = model.predict(self.X_tr.loc[eval_index])
 
             if self.objective == 'multiclass':
                 for item_index, item in zip(eval_index, eval_prediction):
@@ -159,19 +173,25 @@ class LightGBM(object):
 
             # score, threshold = self.feval_custom(eval_prediction, self.y_tr.loc[eval_index])
             if self.metric == 'auc':
-                score = metrics.auc_score(self.y_tr.loc[eval_index], eval_prediction)
-                score_folds.append(score)
-                print(f"FOLD SCORE = {score}")
+                score_auc = metrics.auc_score(self.y_tr.loc[eval_index], eval_prediction)
+                score_ks, threshold_ks = metrics.lgb_ks_score_eval_custom(eval_prediction, self.y_tr.loc[eval_index])
+                score_folds.append(score_auc)
+                score_folds_2.append(score_ks)
+                print(f"FOLD SCORE AUC = {score_auc}, KS = {score_ks}")
             elif self.metric is None:
                 score, threshold = self.feval_custom(eval_prediction, self.y_tr.loc[eval_index])
                 threshold_folds.append(threshold)
                 score_folds.append(score)
+                score_folds_2.append(score)
                 print(f"FOLD SCORE = {score}, FOLD THRESHOLD = {threshold}")
             else:
                 pass
 
         print(f'score all : {score_folds}')
         print(f'score mean : {sum(score_folds) / self.n_folds}')
+        print(f'score all : {score_folds_2}')
+        print(f'score mean : {sum(score_folds_2) / self.n_folds}')
+
 
         # self._validate_and_predict(eval_prediction_folds, prediction_folds_mean, params)
 
@@ -184,7 +204,12 @@ class LightGBM(object):
             .to_csv(self.out_dir / '{}_lgbm_model_{}_submission.csv'.format(self.dataset, self.version), index=False)
 
         if self.save:
-            self._save(params)
+            # self._save(params)
+            print('--------- feature importance ---------')
+            print(pd.DataFrame({
+                'column': self.col_names,
+                'importance': model.feature_importance(),
+            }).sort_values(by='importance', ascending=False))
 
         print("--------- done training and predicting ---------")
 
