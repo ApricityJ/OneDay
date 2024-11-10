@@ -118,5 +118,5 @@ def to_df_true():
 
 
 def to_df_label():
-    p = Path(dir_train).joinpath('TARGET.csv')
+    p = Path(dir_train).joinpath('XW_ENTINFO_TARGET_T.csv')
     return to_df(p)[['CUST_NO', LABEL]]

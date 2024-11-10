@@ -27,11 +27,11 @@ def load_data(dir_path: Path, file_name: str) -> Bunch:
 if __name__ == '__main__':
     args = {
         'dataset': 'xw_ent',
-        'version': '6',
+        'version': '5',
         'objective': 'binary',  # binary, multiclass...
-        'metric': None,  # None需在模型中指定，'auc'
+        'metric': ['auc'],  # None需在模型中指定，'auc'
         'num_class': 1,
-        'boosting': 'dart',  # 'dart' 'rf' 'gbdt'，只是用来训练并不用来寻参
+        'boosting': 'gbdt',  # 'dart' 'rf' 'gbdt'，只是用来训练并不用来寻参
         'optimizer': 'hyperopt',  # hyperopt, optuna...
         'save_experiment': True,
         'train_path': Path(dir_train),
@@ -52,7 +52,7 @@ if __name__ == '__main__':
         # self.eval_key = "f1-macro-mean"
         'feval': 'lgb_ks_score_eval',  # 默认None
         # 'feval': None,  # 默认None
-        'eval_key': "ks-mean",  # 用于优化器
+        'eval_key': "valid ks-mean",  # 用于优化器
         # 'eval_key': "auc-mean",  # 用于优化器
         # 'feval': None,  # 默认None
         # 'eval_key': "auc-mean",  # 用于优化器
@@ -130,6 +130,7 @@ if __name__ == '__main__':
              'learning_rate': 0.021759131913826182, 'min_child_weight': 9.994020026647163,
              'num_leaves': 216, 'reg_alpha': 3.6783359022242137, 'reg_lambda': 3.4141224630155502,
              'subsample': 0.7941142785966878}
+            # 'learning_rate': 0.021759131913826182,
         else:
             best_params = model.optimize()
             best_params['num_leaves'] = int(best_params['num_leaves'])

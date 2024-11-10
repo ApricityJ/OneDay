@@ -36,7 +36,7 @@ class LightGBM(object):
                        col_names: list[str],
                        category_cols: list[str],
                        objective: str,
-                       metric: str | None,
+                       metric: list[str] | None,
                        num_class: int = 2,
                        boosting: str = 'gbdt',
                        optimizer: str = 'hyperopt',
@@ -112,11 +112,11 @@ class LightGBM(object):
         params['num_class'] = self.num_class
         params['metric'] = self.metric
         params['boosting'] = self.boosting
-        # params['first_metric_only'] = True
+        params['first_metric_only'] = True
         params['verbose'] = -1
-        params['n_estimators'] = 2000
+        params['num_boost_round'] = 2000
         # params['early_stopping_round'] = 10
-        callbacks = [log_evaluation(period=100), early_stopping(stopping_rounds=10)]
+        callbacks = [log_evaluation(period=100), early_stopping(stopping_rounds=400)]
         # callbacks = [log_evaluation(period=100)]
 
 
@@ -146,6 +146,7 @@ class LightGBM(object):
             model = lgb.train(params,
                               train_part,
                               # fobj=self.fobj,
+                              num_boost_round=2000,
                               feval=self.feval,
                               # valid_sets=[train_part, eval_part],
                               valid_sets=[eval_part],
@@ -154,7 +155,6 @@ class LightGBM(object):
                               callbacks=callbacks)
 
 
-            print(model.best_iteration)
             prediction_folds_mean += (model.predict(self.X_predict, num_iteration=model.best_iteration) / self.n_folds)
             eval_prediction = model.predict(self.X_tr.loc[eval_index], num_iteration=model.best_iteration)
             # prediction_folds_mean += (model.predict(self.X_predict) / self.n_folds)
@@ -172,7 +172,7 @@ class LightGBM(object):
                     eval_prediction_folds = eval_prediction_folds.append(eval_df)
 
             # score, threshold = self.feval_custom(eval_prediction, self.y_tr.loc[eval_index])
-            if self.metric == 'auc':
+            if self.metric is not None and 'auc' in self.metric:
                 score_auc = metrics.auc_score(self.y_tr.loc[eval_index], eval_prediction)
                 score_ks, threshold_ks = metrics.lgb_ks_score_eval_custom(eval_prediction, self.y_tr.loc[eval_index])
                 score_folds.append(score_auc)
@@ -206,10 +206,14 @@ class LightGBM(object):
         if self.save:
             # self._save(params)
             print('--------- feature importance ---------')
-            print(pd.DataFrame({
+            lgb_result = pd.DataFrame({
                 'column': self.col_names,
                 'importance': model.feature_importance(),
-            }).sort_values(by='importance', ascending=False))
+            }).sort_values(by='importance', ascending=False)
+            lgb_to_drop = lgb_result[lgb_result['importance'] == 0]
+            print(lgb_result)
+            print(f'drop length: {lgb_to_drop.shape[0]}')
+            to_json(lgb_to_drop['column'].tolist(), self.out_dir.joinpath(f'drop_by_lgb.json'))
 
         print("--------- done training and predicting ---------")
 

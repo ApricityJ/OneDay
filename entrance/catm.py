@@ -38,7 +38,7 @@ if __name__ == '__main__':
         'test_file_name': file_name_test,
         'out_model_name': 'result_model_catm.p',
         'magic_seed': active_random_state,
-        'load_best_params': False,
+        'load_best_params': True,
         'params_file_name': 'best_params_catm.dict',
         'n_folds': 5,
         'target': 'train',

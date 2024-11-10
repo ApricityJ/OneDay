@@ -12,28 +12,28 @@ from scipy.misc import derivative
 #     return exp_x / (np.sum(exp_x, axis=1, keepdims=True) + 1e-6)
 
 
-def ks_stat(y_true, y_pred):
-    """计算KS值的自定义评估函数"""
-    fpr, tpr, _ = roc_curve(y_true, y_pred)  # 计算ROC曲线
-    ks_value = np.max(np.abs(tpr - fpr))  # KS统计量
-    return ks_value
-
-
-def lgb_ks_score_eval(y_pred, dataset):
-    """用于LightGBM的自定义KS评估函数"""
-    y_true = dataset.get_label()
-    ks_value = ks_stat(y_true, y_pred)
-    # 返回 (名称, 计算的 KS 值, 是否越高越好)
-    return 'ks', ks_value, True
+# def ks_stat(y_true, y_pred):
+#     """计算KS值的自定义评估函数"""
+#     fpr, tpr, _ = roc_curve(y_true, y_pred)  # 计算ROC曲线
+#     ks_value = np.max(np.abs(tpr - fpr))  # KS统计量
+#     return ks_value
+#
+#
+# def lgb_ks_score_eval(y_pred, dataset):
+#     """用于LightGBM的自定义KS评估函数"""
+#     y_true = dataset.get_label()
+#     ks_value = ks_stat(y_true, y_pred)
+#     # 返回 (名称, 计算的 KS 值, 是否越高越好)
+#     return 'ks', ks_value, True
 
 
 def auc_score(y_true, y_pred):
     return roc_auc_score(y_true, y_pred)
 
 
-# def lgb_ks_score_eval(y_pred, data):
-#     fpr, tpr, thresholds = roc_curve(data.get_label(), y_pred)
-#     return 'ks', max(tpr - fpr), True
+def lgb_ks_score_eval(y_pred, data):
+    fpr, tpr, thresholds = roc_curve(data.get_label(), y_pred)
+    return 'ks', max(tpr - fpr), True
 
 
 def lgb_ks_score_eval_custom(y_pred, y_true):

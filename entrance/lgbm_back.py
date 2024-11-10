@@ -1,218 +1,224 @@
-# import pickle
-# import warnings
-# from pathlib import Path
-# from time import time
-#
-# import pandas as pd
-# import numpy as np
-# from sklearn.utils import Bunch
-# from sklearn.model_selection import train_test_split
-#
-# from model.lightGBM import LightGBM
-# from util.jsons import of_json, to_json
-# from constant import *
-# from util.hyperopt import Hyperopt
-# from util.optuna import Optuna
-# from util.metrics import (lgb_f2_score_eval, get_best_f2_threshold, focal_loss_lgb_1, focal_loss_lgb,
-#                           lgb_f1_score_multi_macro_eval, lgb_f1_score_multi_weighted_eval)
-#
-# warnings.filterwarnings("ignore")
-#
-#
-# default_params_dict = {
-#         'dataset': 'oneday',
-#         'version': '1',
-#         'objective': 'binary',  # binary, multiclass...
-#         'metric': 'auc',  # None需在模型中指定
-#         'num_class': 2,
-#         'optimizer': 'hyperopt',  # hyperopt, optuna...
-#         'save_experiment': True,
-#         'train_path': Path(dir_train),
-#         'test_path': Path(dir_test),
-#         'result_path': Path(dir_result),
-#         'train_file_name': file_name_train,
-#         'test_file_name': file_name_test,
-#         'out_model_name': 'result_model_lgbm.p',
-#         'magic_seed': active_random_state,
-#         'load_best_params': False,
-#         'params_file_name': 'best_params_lgbm.dict',
-#         'n_folds': 5,
-#
-#         'fobj': lambda x, y: focal_loss_lgb(x, y, alpha=0.25, gamma=2.0),  # 默认None
-#         #lambda x, y: f1_score_multi_macro_eval(x, y, self.num_class)
-#         # self.eval_key = "f1-macro-mean"
-#         'feval': 'lgb_f2_score_eval',  # 默认None
-#         'eval_key': "f2-mean",  # 用于优化器
-#
-#         'hyperopt_max_evals': 30,
-#         'optuna_n_trials': 20,
-#         'optuna_direction': 'maximize'
-# }
-#
-#
-# def load_data(dir_path: Path, file_name: str) -> Bunch:
-#     data = pickle.load(open(dir_path.joinpath(file_name), 'rb'))
-#     return data
-#
-#
-# def timer(func):
-#     def func_wrapper(*args, **kwargs):
-#         time_start = time()
-#         result = func(*args, **kwargs)
-#         time_end = time()
-#         time_spend = time_end - time_start
-#         print(f'{func.__name__} cost time {time_spend // 60} minutes.')
-#         return result
-#     return func_wrapper
-#
-#
-# class LightGBMEntrance(object):
-#     def __init__(self, params_dict=None):
-#
-#         if params_dict is None:
-#             params_dict = default_params_dict
-#         self.dataset = params_dict['dataset']
-#         self.version = params_dict['version']
-#         self.objective = params_dict['objective']
-#         self.metric = params_dict['metric']
-#         self.num_class = params_dict['num_class']
-#         self.optimizer = params_dict['optimizer']
-#         self.save_experiment = params_dict['save_experiment']
-#         self.train_path = params_dict['train_path']
-#         self.test_path = params_dict['test_path']
-#         self.result_path = params_dict['result_path']
-#         self.train_file_name = params_dict['train_file_name']
-#         self.test_file_name = params_dict['test_file_name']
-#         self.out_model_name = params_dict['out_model_name']
-#         self.magic_seed = params_dict['magic_seed']
-#         self.load_best_params = params_dict['load_best_params']
-#         self.params_file_name = params_dict['params_file_name']
-#         self.n_folds = params_dict['n_folds']
-#         self.fobj = params_dict['fobj']
-#         self.feval = params_dict['feval']
-#         self.eval_key = params_dict['eval_key']
-#         self.hyperopt_max_evals = params_dict['hyperopt_max_evals']
-#         self.optuna_n_trials = params_dict['optuna_n_trials']
-#         self.optuna_direction = params_dict['optuna_direction']
-#
-#         self.model = None
-#         self.best_params = None
-#
-#         if self.objective == 'multiclass':
-#             assert self.num_class > 2, 'multiclass objective should have class num > 2.'
-#         assert self.params_file_name != '', 'please name the best params file.'
-#
-#         if self.metric is None:
-#             assert self.feval is not None and self.eval_key is not None, \
-#                 "custom metric should be assigned when metric is None."
-#
-#
-#     def __str__(self):
-#         return '\n'.join(f'{item[0]}: {item[1]}' for item in self.__dict__.items())
-#
-#     @timer
-#     def train(self):
-#         print("--------- begin load train and predict data ---------")
-#         train_data = load_data(self.train_path, self.train_file_name)
-#         print(f"columns : {train_data.col_names}")
-#         print(f"category columns : {train_data.category_cols}")
-#         X = train_data.data
-#         y = train_data.target
-#         print(f"X train shape : {X.shape}")
-#         print(f"y train shape : {y.shape}")
-#
-#         test_data = load_data(self.test_path, self.test_file_name)
-#         X_predict = test_data.data
-#         id_predict = test_data.id
-#         print(f"X predict shape : {X_predict.shape}")
-#         print(f"id predict shape : {id_predict.shape}")
-#         print("--------- done load train and predict data ---------")
-#
-#         # X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.25, shuffle=True, random_state=1, stratify=y)
-#
-#         self.model = LightGBM(
-#             dataset = self.dataset,
-#             train_set = [X, y],
-#             predict_set = [X_predict, id_predict],
-#             col_names = train_data.col_names,
-#             category_cols = train_data.category_cols,
-#             objective = self.objective,
-#             metric = self.metric,
-#             num_class = self.num_class,
-#             optimizer = self.optimizer,
-#             magic_seed = self.magic_seed,
-#             out_dir = self.result_path,
-#             out_model_name = self.out_model_name,
-#             save = self.save_experiment,
-#             version = self.version,
-#             n_folds = self.n_folds,
-#             fobj = self.fobj,
-#             feval = self.feval,
-#             eval_key = self.eval_key,
-#             hyperopt_max_evals = self.hyperopt_max_evals,
-#             optuna_n_trials = self.optuna_n_trials,
-#             optuna_direction = self.optuna_direction
-#         )
-#
-#         if self.load_best_params:
-#             self.best_params = of_json(self.result_path.joinpath(self.params_file_name))
-#         else:
-#             self.best_params = self.model.optimize()
-#             self.best_params['num_leaves'] = int(self.best_params['num_leaves'])
-#             to_json(self.best_params, self.result_path.joinpath(self.params_file_name))
-#
-#         print("--------- best params ---------")
-#         print(self.best_params)
-#
-#         self.model.train_and_predict(self.best_params)
-#
-#         # 打印特征重要性
-#         # assert args['out_model_name'] != '' and args['result_path'] != '', 'please give the model path.'
-#         # data_bunch = pickle.load(open(args['result_path'] / args['out_model_name'], 'rb'))
-#         # LightGBM.print_feature_importance(data_bunch)
-#
-#
-#
-#
-# if __name__ == '__main__':
-#
-#
-#     elif args['target'] == 'predict':
-#         assert args['out_model_name'] != '' and args['result_path'] != '', 'please give the model path.'
-#
-#         print("--------- begin load predict data ---------")
-#         data_bunch = pickle.load(open(args['test_path'] / args['test_file_name'], 'rb'))
-#         X_predict = data_bunch.data
-#         id_predict = data_bunch.id
-#         print(f"X predict shape : {X_predict.shape}")
-#         print(f"id predict shape : {id_predict.shape}")
-#         print("--------- done load predict data ---------")
-#
-#         data_bunch = pickle.load(open(args['result_path'] / args['out_model_name'], 'rb'))
-#         model = data_bunch.model
-#         test_prediction = model.predict(X_predict)
-#         print(test_prediction)
-#
-#         if args['objective'] == 'binary':
-#             test_result = pd.DataFrame({'id': id_predict, 'predicts': test_prediction})
-#             test_result.to_csv(args['result_path'] / '{}_lgbm_model_{}_test_from_all_data_model.csv'
-#                                .format(args['dataset'], args['version']), index=False)
-#         elif args['objective'] == 'multiclass':
-#             test_prediction = np.argmax(test_prediction, axis=1)
-#             test_result = pd.DataFrame({'id': id_predict, 'predicts': test_prediction})
-#             test_result.to_csv(args['result_path'] / '{}_lgbm_model_{}_test_from_all_data_model.csv'
-#                                .format(args['dataset'], args['version']), index=False)
-#         else:
-#             pass
-#
-#     elif args['target'] == 'feature_importance':
-#         assert args['out_model_name'] != '' and args['result_path'] != '', 'please give the model path.'
-#
-#         data_bunch = pickle.load(open(args['result_path'] / args['out_model_name'], 'rb'))
-#         LightGBM.print_feature_importance(data_bunch)
-#
-#         # train_data_bunch = pickle.load(open(args['train_path'] / args['train_file_name'], 'rb'))
-#         # X = train_data_bunch.data
-#         # LightGBM.shap_feature_importance(data_bunch, X)
-#     else:
-#         pass
+import warnings
+from pathlib import Path
+import pickle
+import lightgbm as lgb
+import numpy as np
+import pandas as pd
+from hyperopt import hp, tpe, fmin, Trials, STATUS_OK
+from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_curve
+from sklearn.model_selection import StratifiedKFold
+from sklearn.utils import Bunch
+
+from constant import *
+from util.metrics import lgb_ks_score_eval
+from data import exporter
+
+warnings.filterwarnings('ignore', category=UserWarning)
+
+random_state = 42
+
+# 超参数空间
+param_space = {
+    'learning_rate': hp.uniform('learning_rate', 0.01, 0.05),  # 学习率
+    'num_leaves': hp.choice('num_leaves', np.arange(20, 200, dtype=int)),  # 叶子数
+    'max_depth': hp.choice('max_depth', np.arange(3, 12, dtype=int)),  # 树的最大深度
+    'min_child_weight': hp.uniform('min_child_weight', 0.001, 10),  # 子叶节点的最小权重
+    'colsample_bytree': hp.uniform('colsample_bytree', 0.5, 1.0),  # 样本列采样率
+    'scale_pos_weight': hp.uniform('scale_pos_weight', 1, 20),
+    'subsample': hp.uniform('subsample', 0.5, 1.0),  # 样本采样率
+    'reg_alpha': hp.uniform('reg_alpha', 0.0, 1.0),  # L1正则化
+    'reg_lambda': hp.uniform('reg_lambda', 0.0, 1.0)  # L2正则化
+}
+
+
+def ks_stat(y_true, y_pred):
+    """计算KS值的自定义评估函数"""
+    fpr, tpr, _ = roc_curve(y_true, y_pred)  # 计算ROC曲线
+    ks_value = np.max(np.abs(tpr - fpr))  # KS统计量
+    return ks_value
+
+
+# 自定义目标函数，用于贝叶斯优化
+def objective(params, X, y, n_folds=5):
+    """贝叶斯优化的目标函数，返回负的整体验证集KS分数"""
+    # 设置模型参数
+    params['boosting_type'] = 'gbdt'
+    params['objective'] = 'binary'
+    params['verbose'] = -1
+    params['n_estimators'] = 10000
+    params['metric'] = 'auc'
+    params['num_leaves'] = params['num_leaves']
+    params['max_depth'] = params['max_depth']
+    params['seed'] = random_state
+    params['bagging_seed'] = random_state
+    params['feature_fraction_seed'] = random_state
+    params['data_random_seed'] = random_state
+    params['deterministic'] = True
+    params['force_col_wise'] = True  # Helps in achieving determinism
+    # params['num_threads'] = 1        # Single thread for reproducibility
+
+    kf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=random_state)
+
+    # 存储每一折的预测结果
+    final_predictions = np.zeros(len(X))
+
+    for train_idx, valid_idx in kf.split(X, y):
+        X_train, X_valid = X.iloc[train_idx], X.iloc[valid_idx]
+        y_train, y_valid = y.iloc[train_idx], y.iloc[valid_idx]
+
+        # 建立LightGBM训练集
+        lgb_train = lgb.Dataset(X_train, y_train)
+        lgb_valid = lgb.Dataset(X_valid, y_valid, reference=lgb_train)
+
+        # 训练LightGBM模型
+        model = lgb.train(
+            params,
+            lgb_train,
+            feval=lgb_ks_score_eval,
+            valid_sets=[lgb_valid],
+            valid_names=['valid'],
+            callbacks=[
+                lgb.early_stopping(stopping_rounds=400),
+                lgb.log_evaluation(100)
+            ]
+        )
+
+        # 验证集预测概率
+        y_pred = model.predict(X_valid, num_iteration=model.best_iteration)
+
+        # 将每一折的预测结果填入到相应的索引位置
+        final_predictions[valid_idx] = y_pred
+
+    # overall_score = roc_auc_score(y, final_predictions)
+    overall_score = ks_stat(y, final_predictions)
+    print(overall_score)
+
+    # 返回负的AUC分数作为最小化目标 -->  ks
+    return {'loss': -overall_score, 'status': STATUS_OK}
+
+
+# 贝叶斯优化调参函数
+def bayesian_optimize_lgbm(X, y, param_space, max_evals=50):
+    trials = Trials()
+
+    # 使用fmin函数进行贝叶斯优化
+    best_params = fmin(
+        fn=lambda params: objective(params, X, y),  # 优化目标
+        space=param_space,  # 参数空间
+        algo=tpe.suggest,  # 使用TPE算法
+        max_evals=max_evals,  # 最大评估次数
+        trials=trials,  # 记录每次评估的结果
+        rstate=np.random.default_rng(random_state)
+    )
+
+    return best_params, trials
+
+
+def lgb_5_fold(X, y, X_predict, id_predict, best_params, n_folds=5):
+    # Map indices back to actual values
+    best_params['num_leaves'] = np.arange(20, 200, dtype=int)[best_params['num_leaves']]
+    best_params['max_depth'] = np.arange(3, 12, dtype=int)[best_params['max_depth']]
+
+    # Add necessary parameters
+    best_params.update({
+        'boosting_type': 'gbdt',
+        'objective': 'binary',
+        'verbose': -1,
+        'n_estimators': 10000,
+        'metric': 'auc',
+        'seed': random_state,
+        'bagging_seed': random_state,
+        'feature_fraction_seed': random_state,
+        'data_random_seed': random_state,
+        'deterministic': True,
+        'force_col_wise': True
+    })
+
+    skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=random_state)
+    fold_scores = []
+    final_predictions = np.zeros(len(X))  # 用于存储每一折的预测结果
+    prediction_folds_mean = np.zeros(len(X_predict))
+
+    for fold, (train_idx, valid_idx) in enumerate(skf.split(X, y)):
+        X_train, X_valid = X.iloc[train_idx], X.iloc[valid_idx]
+        y_train, y_valid = y.iloc[train_idx], y.iloc[valid_idx]
+
+        # 训练模型
+        lgb_train = lgb.Dataset(X_train, y_train)
+        lgb_valid = lgb.Dataset(X_valid, y_valid, reference=lgb_train)
+
+        model = lgb.train(
+            best_params,
+            lgb_train,
+            feval=lgb_ks_score_eval,
+            valid_sets=[lgb_valid],
+            valid_names=['valid'],
+            callbacks=[
+                lgb.early_stopping(stopping_rounds=400),  # Ensure consistency
+                lgb.log_evaluation(100)
+            ]
+        )
+
+        # 保存模型
+        # model_path = f"{dir_model}/lgbm_fold_{fold + 1}.bin"
+        # model.save_model(model_path)
+        # print(f"Model for fold {fold + 1} saved at {model_path}")
+
+        # 验证集预测
+        y_pred = model.predict(X_valid, num_iteration=model.best_iteration)
+        prediction_folds_mean += (model.predict(X_predict, num_iteration=model.best_iteration) / n_folds)
+
+        # 计算KS或AUC
+        score = roc_auc_score(y_valid, y_pred)
+        fold_scores.append(score)
+
+        # 将每一折的预测结果保存到对应的索引位置
+        final_predictions[valid_idx] = y_pred
+
+        print(f"Fold {fold + 1} - AUC Score: {score:.4f}")
+
+    # 最终综合预测结果的评分
+    overall_score = roc_auc_score(y, final_predictions)
+    print(f"\nOverall AUC Score: {overall_score:.4f}")
+
+    overall_ks = ks_stat(y, final_predictions)
+    print(f"\nOverall KS Score: {overall_ks:.4f}")
+
+    # 提交预测集的概率
+    pd.DataFrame({'id': id_predict, 'predicts': prediction_folds_mean}) \
+        .to_csv(Path(dir_result) / 'upload.csv', index=False)
+
+    return overall_score
+
+
+def load_data(dir_path: Path, file_name: str) -> Bunch:
+    data = pickle.load(open(dir_path.joinpath(file_name), 'rb'))
+    return data
+
+
+# 读取数据
+print("--------- begin load train and predict data ---------")
+train_data = load_data(Path(dir_train), 'train.p')
+print(f"columns : {train_data.col_names}")
+# print(f"category columns : {train_data.category_cols}")
+X = train_data.data
+y = train_data.target
+print(f"X train shape : {X.shape}")
+print(f"y train shape : {y.shape}")
+
+test_data = load_data(Path(dir_test), 'test.p')
+X_predict = test_data.data
+id_predict = test_data.id
+print(f"X predict shape : {X_predict.shape}")
+print(f"id predict shape : {id_predict.shape}")
+print("--------- done load train and predict data ---------")
+
+
+# 执行贝叶斯优化
+best_params, trials = bayesian_optimize_lgbm(X, y, param_space, max_evals=30)
+print("Best parameters found:", best_params)
+
+# 执行5折交叉验证
+best_score = lgb_5_fold(X, y, X_predict, id_predict,  best_params)
+print(f"Best score: {best_score}")

@@ -2,7 +2,7 @@ from pathlib import Path
 import pickle
 
 from boruta import BorutaPy
-from lightgbm import LGBMClassifier
+import lightgbm as lgb
 from sklearn.ensemble import RandomForestClassifier
 
 import numpy as np
@@ -17,6 +17,7 @@ from sklearn.model_selection import StratifiedKFold, train_test_split
 from data import loader, exporter
 from util import jsons
 from constant import *
+import util.metrics as metrics
 
 import warnings
 
@@ -157,6 +158,9 @@ def distribution_check(df_train, df_test, columns, threshold):
 # 这里load的文件是包含 'SRC' 'ID', 但没有 'LABEL' 的
 def load_dataframe_to_process(key: str):
     df_data = loader.to_df(Path(dir_preprocess).joinpath(f'{key}.csv'))
+    # print(df_data.columns.tolist())
+    if LABEL in df_data.columns.tolist():
+        df_data.drop(columns=[LABEL], inplace=True)
     return df_data[df_data['SRC'] == 'train'], df_data[df_data['SRC'] == 'test']
 
 
@@ -178,7 +182,7 @@ def adv_val(X_adv: DataFrame, y_adv: DataFrame):
     # accs = []
     # f1s = []
     aucs = []
-    model = LGBMClassifier()
+    model = lgb.LGBMClassifier()
 
     skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=active_random_state)
     for train_index, test_index in skf.split(X_adv, y_adv):
@@ -189,7 +193,7 @@ def adv_val(X_adv: DataFrame, y_adv: DataFrame):
         model.fit(X_adv_train, y_adv_train)
 
         # 预测
-        y_adv_pred = model.predict(X_adv_test)
+        y_adv_pred = model.predict_proba(X_adv_test)[:,1]
 
         # acc = accuracy_score(y_adv_test, y_adv_pred)
         # f1 = f1_score(y_adv_test, y_adv_pred)
@@ -220,12 +224,13 @@ def adv_val(X_adv: DataFrame, y_adv: DataFrame):
 def adv_val_select(key: str):
     df_train, df_test = load_dataframe_to_process(key)
     drop_cols = jsons.of_json(Path(dir_result).joinpath(f'{key}_base_to_drop.json'))
-    df_train.drop(['SRC', ID], axis=1, inplace=True)  # 如果里面有日期也要记得删除
-    df_test.drop(['SRC', ID], axis=1, inplace=True)
+    df_train.drop(['SRC', ID, ], axis=1, inplace=True)  # 如果里面有日期也要记得删除
+    df_test.drop(['SRC', ID, ], axis=1, inplace=True)
     df_train.drop(drop_cols, axis=1, inplace=True)
     df_test.drop(drop_cols, axis=1, inplace=True)
     print(f"train column nums : {df_train.shape}")
     print(f"test column nums : {df_test.shape}")
+    print(df_train.columns.tolist())
 
     df_train, df_test = drop_distractions(df_train, df_test)
 
@@ -261,27 +266,16 @@ def base_select(key: str):
     columns_to_drop = []
     columns_with_unique_values = unique_values_check(df_train)
     columns_to_drop.extend(columns_with_unique_values)
-    columns_with_high_null = high_null_percentage_check(df_train, 0.8)
-    columns_to_drop.extend(columns_with_high_null)
-    columns_with_high_correlation = correlation_check(df_train, 0.95)
-    columns_to_drop.extend(columns_with_high_correlation)
+    # columns_with_high_null = high_null_percentage_check(df_train, 0.97)
+    # columns_to_drop.extend(columns_with_high_null)
+    # columns_with_high_correlation = correlation_check(df_train, 0.97)
+    # columns_to_drop.extend(columns_with_high_correlation)
     columns_to_check_distribution = list(set(df_train.columns.tolist()) - set(columns_to_drop))
     columns_with_diff_distribution = distribution_check(df_train, df_test, columns_to_check_distribution, 0.05)
     columns_to_drop.extend(columns_with_diff_distribution)
 
     print(f"after column nums : {df_train.shape[1] - len(columns_to_drop)}")
     return columns_to_drop
-
-
-# 基础特征筛选
-key_1 = 'flatmap'
-# columns_to_drop_base = base_select(key_1)
-# jsons.to_json(columns_to_drop_base, Path(dir_result).joinpath(f'{key_1}_base_to_drop.json'))
-print('-----------------------------')
-
-# 对抗验证
-# adv_val_select(key_1)
-print('-----------------------------')
 
 
 def boruta_select(key: str):
@@ -338,14 +332,15 @@ def boruta_select(key: str):
 def lgb_select(key: str, num_runs: int, threshold: float):
     # 读取数据和LABEL
     df_train, df_test = load_dataframe_to_process(key)
+    drop_cols = jsons.of_json(Path(dir_result).joinpath(f'{key}_base_to_drop.json'))
+    df_train.drop(drop_cols, axis=1, inplace=True)
+    df_test.drop(drop_cols, axis=1, inplace=True)
     df_target = loader.to_df_label()
 
     # 拼接
     X = df_train.merge(df_target, left_on=['CUST_NO'], right_on=['CUST_NO'], how='left')
     y = X[LABEL]
     X.drop([LABEL, 'SRC', 'CUST_NO'], axis=1, inplace=True)
-    # 要先处理好类别特征
-    X.drop(['NTRL_CUST_SEX_CD', 'NTRL_RANK_CD'], axis=1, inplace=True)
     print(f"column nums : {X.shape[1]}")
 
     feature_importances = pd.DataFrame()
@@ -361,21 +356,32 @@ def lgb_select(key: str, num_runs: int, threshold: float):
                                                               random_state=active_random_state)
 
         # 定义LightGBM模型
-        model = LGBMClassifier(random_state=random_state, n_estimators=1000, learning_rate=0.1)
-        model.fit(
-            X_train, y_train,
-            eval_set=[(X_valid, y_valid)],
-            eval_metric='auc'
-        )
+        # model = LGBMClassifier(random_state=random_state, n_estimators=1000, learning_rate=0.1)
+        # model.fit(
+        #     X_train, y_train,
+        #     eval_set=[(X_valid, y_valid)],
+        #     eval_metric=getattr(metrics, 'lgb_ks_score_eval'),
+        #     early_stopping_rounds=400,
+        # )
+
+        params = {'random_state': random_state, 'n_estimators': 1000, 'learning_rate': 0.01}
+        model = lgb.train(params,
+                          lgb.Dataset(X_train, y_train),
+                          feval=getattr(metrics, 'lgb_ks_score_eval'),
+                          valid_sets=[lgb.Dataset(X_valid, y_valid)],
+                          early_stopping_rounds=400,
+                          verbose_eval=1)
 
         # 获取特征重要性并保存
-        fold_importance = model.feature_importances_
+        fold_importance = model.feature_importance()
         feature_importances[f'run_{random_state}'] = fold_importance
+        # print(feature_importances)
 
     # 平均一下
+    print(feature_importances)
     feature_importances['mean_importance'] = feature_importances.iloc[:, 1:].mean(axis=1)
 
-    selected_features = feature_importances[feature_importances['mean_importance'] > threshold ]['feature'].tolist()
+    selected_features = feature_importances[feature_importances['mean_importance'] > threshold]['feature'].tolist()
 
     print("Selected Features nums :", len(selected_features))
     print("Selected Features by lgb:", selected_features)
@@ -386,5 +392,15 @@ def lgb_select(key: str, num_runs: int, threshold: float):
     jsons.to_json(list(selected), Path(dir_result).joinpath(f'{key}_selected_cols_by_lgb.json'))
 
 
-# lgb_select('flatmap', 2,50)
-boruta_select('flatmap')
+# 基础特征筛选
+key_1 = 'v5'
+columns_to_drop_base = base_select(key_1)
+jsons.to_json(columns_to_drop_base, Path(dir_result).joinpath(f'{key_1}_base_to_drop.json'))
+print('-----------------------------')
+
+# 对抗验证
+# adv_val_select(key_1)
+print('-----------------------------')
+
+# lgb_select('v6', 3, 0)
+# boruta_select('flatmap')

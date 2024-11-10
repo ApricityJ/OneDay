@@ -70,12 +70,16 @@ if __name__ == '__main__':
 
         # X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.25, shuffle=True, random_state=1, stratify=y)
         print("--------- begin test ---------")
-        if X.isnull().values.any():
-            print('some null values in X')
-        X.replace([np.inf, -np.inf], np.nan, inplace=True)
-        X.fillna(0, inplace=True)
-        if not X.isnull().values.any():
-            print('test again, no null values in X')
+        # if X.isnull().values.any():
+        #     print('some null values in X')
+        X.replace([np.inf, -np.inf], 1, inplace=True)
+        X_predict.replace([np.inf, -np.inf], 1, inplace=True)
+        # X.fillna(-1, inplace=True)
+        # if not X.isnull().values.any():
+        #     print('test again, no null values in X')
+        # for name in col_names:
+        #     print(name)
+        #     test = xgb.DMatrix(X[name], y)
         print("---------- end test ----------")
 
         xgboost = XGBoost(

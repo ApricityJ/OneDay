@@ -36,8 +36,10 @@ class Hyperopt(object):
 
         if self.model_type == "lightgbm":
             def objective(params):
-                params['num_boost_round'] = int(params['num_boost_round'])
+                # params['num_boost_round'] = int(params['num_boost_round'])
                 params['num_leaves'] = int(params['num_leaves'])
+                # params['max_depth'] = int(params['max_depth'])
+                # params['min_data_in_leaf'] = int(params['min_data_in_leaf'])
 
                 params['is_unbalance'] = True
                 params['verbose'] = -1
@@ -53,13 +55,13 @@ class Hyperopt(object):
                 cv_result = lgb.cv(
                     params,
                     self.model.lgb_train,
-                    num_boost_round=params['num_boost_round'],
-                    fobj=self.model.fobj,
+                    num_boost_round=2000,
                     feval=self.model.feval,
                     nfold=5,
                     stratified=True,
-                    early_stopping_rounds=30,
+                    callbacks=[lgb.early_stopping(stopping_rounds=500)],
                     seed=self.model.magic_seed)
+                print(cv_result)
                 self.early_stop_dict[objective.i] = len(cv_result[self.model.eval_key])
                 score = round(cv_result[self.model.eval_key][-1], 4)
                 objective.i += 1
@@ -85,7 +87,7 @@ class Hyperopt(object):
                     maximize=self.model.eval_maximize,
                     nfold=5,
                     stratified=True,
-                    early_stopping_rounds=30,
+                    early_stopping_rounds=100,
                     seed=self.model.magic_seed)
                 # print(cv_result)
                 self.early_stop_dict[objective.i] = len(cv_result[self.model.eval_key])
@@ -117,7 +119,7 @@ class Hyperopt(object):
                     stratified=True,
                     verbose=False,
                     num_boost_round=params['num_boost_round'],
-                    early_stopping_rounds=30,
+                    early_stopping_rounds=400,
                     seed=self.model.magic_seed)
                 # print(cv_result.columns)
                 score = np.max(cv_result[self.model.eval_key])
@@ -137,8 +139,8 @@ class Hyperopt(object):
 
         if self.model_type == "lightgbm":
             space = {
-                'learning_rate': hp.uniform('learning_rate', 0.01, 0.5),
-                'num_boost_round': hp.quniform('num_boost_round', 100, 10000, 100),  # not sure
+                'learning_rate': hp.uniform('learning_rate', 0.01, 0.2),
+                # 'num_boost_round': hp.quniform('num_boost_round', 100, 10000, 100),  # not sure
                 'num_leaves': hp.quniform('num_leaves', 31, 255, 4),
                 'min_child_weight': hp.uniform('min_child_weight', 0.1, 10),
                 'colsample_bytree': hp.uniform('colsample_bytree', 0.5, 1.),
@@ -150,7 +152,7 @@ class Hyperopt(object):
             return space
         elif self.model_type == "xgboost":
             space = {
-                'eta': hp.uniform('learning_rate', 0.01, 0.5),
+                'eta': hp.uniform('learning_rate', 0.01, 0.2),
                 'num_boost_round': hp.quniform('num_boost_round', 100, 10000, 100),
                 'gamma': hp.uniform('gamma', 0.0, 0.5),
                 'max_depth': hp.choice('max_depth', np.arange(1, 14, dtype=int)),
@@ -164,7 +166,7 @@ class Hyperopt(object):
         elif self.model_type == 'catboost':
             space = {
                 'depth': scope.int(hp.quniform('depth', 4, 10, 1)),
-                'learning_rate': hp.uniform('learning_rate', 0.01, 0.3),
+                'learning_rate': hp.uniform('learning_rate', 0.01, 0.2),
                 'num_boost_round': scope.int(hp.quniform('num_boost_round', 100, 1000, 50)),
                 'l2_leaf_reg': hp.uniform('l2_leaf_reg', 1, 10),
                 'border_count': scope.int(hp.quniform('border_count', 32, 255, 1)),

@@ -13,5 +13,9 @@ from constant import *
 import util.metrics as metrics
 
 
-test = getattr(metrics, 'CatKSEvalMetric')
-print(test())
+df = loader.to_df(Path(dir_preprocess).joinpath(f'v7.csv'))
+v7_list = df.columns.tolist()
+df = loader.to_df(Path(dir_preprocess).joinpath(f'v8.csv'))
+v8_list = df.columns.tolist()
+print(set(v7_list) - set(v8_list))
+

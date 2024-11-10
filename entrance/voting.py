@@ -12,7 +12,7 @@ from constant import *
 warnings.filterwarnings("ignore")
 
 
-def calculate_score(dfs, weights=(1, 1, 1)):
+def calculate_score(dfs, weights=(1, 1)):
     assert len(dfs) == len(weights)
     result = pd.DataFrame(columns=['id', 'predicts'])
     result['id'] = dfs[0]['id']
@@ -23,11 +23,11 @@ def calculate_score(dfs, weights=(1, 1, 1)):
 
 
 def vote():
-    lgb_result = pd.read_csv(Path(dir_result).joinpath('oneday_lgbm_model_1_submission.csv'), encoding='utf-8')
-    xgb_result = pd.read_csv(Path(dir_result).joinpath('oneday_xgb_model_1_submission.csv'), encoding='utf-8')
-    cat_result = pd.read_csv(Path(dir_result).joinpath('oneday_catm_model_1_submission.csv'), encoding='utf-8')
+    lgb_result = pd.read_csv(Path(dir_result).joinpath('xw_ent_lgbm_model_5_submission.csv'), encoding='utf-8')
+    xgb_result = pd.read_csv(Path(dir_result).joinpath('xw_ent_lgbm_model_5_submission_0.55068.csv'), encoding='utf-8')
+    # cat_result = pd.read_csv(Path(dir_result).joinpath('oneday_catm_model_1_submission.csv'), encoding='utf-8')
 
-    result = calculate_score([lgb_result, xgb_result, cat_result])
+    result = calculate_score([lgb_result, xgb_result])
     result.to_csv(Path(dir_result) / 'oneday_voting_1_submission.csv', index=False)
 
 

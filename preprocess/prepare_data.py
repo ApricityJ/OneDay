@@ -26,11 +26,17 @@ from constant import *
 # print(df_train.shape)
 # print(df_test.shape)
 
-# drop_cols = jsons.of_json(Path(dir_result).joinpath(f'flatmap_base_to_drop.json'))
-# drop_cols.append('NTRL_CUST_SEX_CD')
-# drop_cols.append('NTRL_RANK_CD')
-df = loader.to_df(Path(dir_preprocess).joinpath(f'v1.csv'))
-# df.drop(drop_cols, axis=1, inplace=True)
+drop_cols = jsons.of_json(Path(dir_result).joinpath(f'v5_base_to_drop.json'))
+# drop_cols_2 = jsons.of_json(Path(dir_result).joinpath(f'drop_by_lgb.json'))
+# selected_cols = jsons.of_json(Path(dir_result).joinpath(f'v6_selected_cols_by_lgb.json'))
+# selected_cols.append('SRC')
+# selected_cols.append(LABEL)
+df = loader.to_df(Path(dir_preprocess).joinpath(f'v5.csv'))
+# df = df.loc[:, selected_cols]
+# df.drop(['DATA_DAT'], axis=1, inplace=True)
+# df.drop(['ACTG_DIRET_CD', 'ACTG_DIRET_CD_last_month'], axis=1, inplace=True)
+df.drop(drop_cols, axis=1, inplace=True)
+# df.drop(drop_cols_2, axis=1, inplace=True)
 # df_target = loader.to_df_label()
 # df = df.merge(df_target, left_on=['CUST_NO'], right_on=['CUST_NO'], how='left')
 
@@ -46,6 +52,7 @@ print(df_train.columns.tolist())
 
 
 
+# category_cols = ['ENTTYPE_CD_LABEL', 'REGPROVIN_CD_LABEL', 'INDS_CD_LABEL', 'HAVE_网店', 'HAVE_网站']
 category_cols = []
 data_bunch_train = Bunch()
 data_bunch_train.target = df_train[LABEL]
